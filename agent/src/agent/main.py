@@ -10,16 +10,16 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
 from typing import TYPE_CHECKING
-from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from livekit import rtc
 from livekit.agents import (
-    Agent,
     AgentServer,
     AgentSession,
+    AudioConfig,
+    BackgroundAudioPlayer,
+    BuiltinAudioClip,
     JobContext,
     JobProcess,
     TurnHandlingOptions,
@@ -30,8 +30,11 @@ from livekit.agents import (
 )
 from livekit.plugins import deepgram, google, groq, noise_cancellation, silero
 
+from agent.api_client import SAMPLE_RESTAURANT_PHONE, ApiError, make_restaurant_api
+from agent.call_limits import CallLimits
 from agent.metrics import LatencyTracker
-from agent.prompts import build_greeting, build_instructions
+from agent.prompts import build_greeting
+from agent.tools import CallState, Receptionist
 
 if TYPE_CHECKING:
     from livekit.agents.voice.room_io.types import NoiseCancellationParams
@@ -39,37 +42,67 @@ if TYPE_CHECKING:
 load_dotenv()
 logger = logging.getLogger("agent")
 
-# Stand-in for GET /api/agent/restaurants/by-number/{phone} until the API client lands in
-# week 2. Mirrors the example response in contracts/openapi.yaml. Fictional data only.
-DEV_RESTAURANT = {
-    "name": "The Saffron Table",
-    "timezone": "Asia/Kolkata",
-    "greeting": "Thanks for calling The Saffron Table.",
-    "recording_enabled": True,
-    "address": "12 Residency Road, near the Brigade Road junction.",
-    "hours_summary": "Open Tuesday to Sunday, 12 to 3 PM and 6 to 11 PM. Closed on Mondays.",
-    "policies": [
-        "We hold tables for 15 minutes past the booking time.",
-        "Parties of more than 8 are booked by the manager.",
-    ],
-}
+# Spoken replies are a sentence or two. The cap stops a runaway answer from eating the free-tier
+# token quota, while leaving room for the short reasoning gpt-oss and Gemini do first.
+MAX_REPLY_TOKENS = 300
 
 
-def build_llm() -> llm.LLM:
-    """Groq by default: it had the fastest first token in the week-1 measurements (docs/agent.md).
-    LLM_PROVIDER=gemini switches, so the two can still be timed side by side."""
-    provider = os.getenv("LLM_PROVIDER", "groq").lower()
-    if provider == "groq":
-        # The plugin sets reasoning_effort="low" for gpt-oss models.
-        return groq.LLM(model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"))
-    if provider != "gemini":
-        raise ValueError(f"LLM_PROVIDER must be 'gemini' or 'groq', got {provider!r}")
+def groq_llm() -> llm.LLM:
+    # The plugin sets reasoning_effort="low" for gpt-oss models.
+    return groq.LLM(
+        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"), max_completion_tokens=MAX_REPLY_TOKENS
+    )
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+
+class ForeignCallSignatures(dict[str, bytes]):
+    """Thought signatures for Gemini, with a stand-in for tool calls another model made.
+
+    Gemini 3 rejects a request whose current turn has a tool call without a thought signature,
+    which is every call Groq made before a mid-turn fallback. Google documents a dummy signature
+    that skips the check for calls Gemini didn't make; Gemini's own signatures still pass through.
+    """
+
+    SKIP = b"skip_thought_signature_validator"
+
+    def get(self, key: str, default: bytes | None = None) -> bytes:  # type: ignore[override]
+        return super().get(key, self.SKIP)
+
+    def __bool__(self) -> bool:  # the plugin skips signatures entirely when the map is falsy
+        return True
+
+
+def gemini_llm() -> llm.LLM:
     # Thinking adds latency before the first token. Gemini 3+ takes a level, and the lowest
     # accepted level varies by model: 3.5 Flash-Lite takes "minimal", 3.8 Flash needs "low".
-    thinking = {"thinking_level": os.getenv("GEMINI_THINKING_LEVEL", "minimal")}
-    return google.LLM(model=model, thinking_config=thinking)
+    gemini = google.LLM(
+        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+        thinking_config={"thinking_level": os.getenv("GEMINI_THINKING_LEVEL", "minimal")},
+        max_output_tokens=MAX_REPLY_TOKENS,
+    )
+    # Private plugin attribute; tests/test_llm_setup.py fails if an upgrade changes it.
+    gemini._thought_signatures = ForeignCallSignatures()
+    return gemini
+
+
+def build_llm() -> tuple[llm.LLM, str]:
+    """The LLM_PROVIDER model first (Groq by default, the fastest in the week-1 measurements).
+
+    When the other provider's key is set too, it becomes an automatic fallback: a rate-limit or
+    outage on the first switches the call to the second instead of dropping it.
+    Returns the LLM and a label for the latency logs.
+    """
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
+    if provider not in ("groq", "gemini"):
+        raise ValueError(f"LLM_PROVIDER must be 'gemini' or 'groq', got {provider!r}")
+    primary, backup, backup_key = (
+        (groq_llm(), gemini_llm, "GOOGLE_API_KEY")
+        if provider == "groq"
+        else (gemini_llm(), groq_llm, "GROQ_API_KEY")
+    )
+    if not os.getenv(backup_key):
+        return primary, primary.model
+    fallback = backup()
+    return llm.FallbackAdapter([primary, fallback]), f"{primary.model} (fallback {fallback.model})"
 
 
 def select_noise_cancellation(params: NoiseCancellationParams):
@@ -79,11 +112,17 @@ def select_noise_cancellation(params: NoiseCancellationParams):
     return noise_cancellation.BVC()
 
 
-class Receptionist(Agent):
-    """The restaurant's phone receptionist. Function tools are added here in week 2."""
-
-    def __init__(self, restaurant: dict, now: datetime) -> None:
-        super().__init__(instructions=build_instructions(restaurant, now))
+async def identify_call(ctx: JobContext) -> tuple[str | None, str]:
+    """(caller's number if the phone line gives one, the restaurant number that was dialled)."""
+    default = os.getenv("DEFAULT_RESTAURANT_PHONE", SAMPLE_RESTAURANT_PHONE)
+    if ctx.is_fake_job():  # console mode: no room, no caller ID
+        return None, default
+    participant = await ctx.wait_for_participant()
+    attrs = participant.attributes
+    if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+        return attrs.get("sip.phoneNumber"), attrs.get("sip.trunkPhoneNumber") or default
+    # Browser test calls: the web token route sets restaurant_phone (see contracts/openapi.yaml).
+    return None, attrs.get("restaurant_phone") or default
 
 
 def prewarm(proc: JobProcess) -> None:
@@ -98,34 +137,82 @@ server = AgentServer(setup_fnc=prewarm)
 async def entrypoint(ctx: JobContext) -> None:
     ctx.log_context_fields = {"room": ctx.room.name}
 
-    restaurant = DEV_RESTAURANT
-    now = datetime.now(ZoneInfo(restaurant["timezone"]))
-    session_llm = build_llm()
+    api = make_restaurant_api()
+    caller_phone, dialed = await identify_call(ctx)
+    try:
+        restaurant = await api.get_restaurant_by_number(dialed)
+    except ApiError as e:
+        logger.error("no restaurant for dialed number %s: %s", dialed, e)
+        await api.aclose()
+        return
+    state = CallState(api=api, restaurant=restaurant, call_id=ctx.room.name, caller_phone=caller_phone)
 
-    session = AgentSession(
+    session_llm, llm_label = build_llm()
+    # Seconds of silence before "Are you still there?", and again before hanging up.
+    silence_seconds = float(os.getenv("SILENCE_CHECK_IN_SECONDS", "10"))
+    session = AgentSession[CallState](
+        userdata=state,
         vad=ctx.proc.userdata["vad"],
         stt=deepgram.STT(model="nova-3", language="en-US"),
         llm=session_llm,
         tts=deepgram.TTS(model="aura-2-andromeda-en"),
-        # LiveKit's turn model: hosted in dev and on LiveKit Cloud, local "mini" model as fallback.
-        turn_handling=TurnHandlingOptions(turn_detection=inference.TurnDetector()),
+        turn_handling=TurnHandlingOptions(
+            # LiveKit's turn model: hosted in dev and on LiveKit Cloud, local "mini" model as fallback.
+            turn_detection=inference.TurnDetector(),
+            # Start the LLM before the turn ends to save latency, but at most once per turn: each
+            # retry is another request against the free tier's tokens-per-minute limit.
+            preemptive_generation={"max_retries": 1},
+        ),
+        user_away_timeout=silence_seconds,
+        max_tool_steps=3,
     )
 
-    latency = LatencyTracker(llm_model=session_llm.model)
+    limits = CallLimits(
+        session,
+        ctx,
+        max_call_seconds=float(os.getenv("MAX_CALL_SECONDS", "300")),
+        silence_grace_seconds=silence_seconds,
+    )
+    state.end_call = limits.end_after
+
+    latency = LatencyTracker(llm_model=llm_label)
     latency.attach(session)
 
-    async def log_latency_summary() -> None:
+    async def on_shutdown() -> None:
         latency.log_summary()
+        for usage in session.usage.model_usage:
+            if getattr(usage, "type", "") == "llm_usage":
+                logger.info(
+                    "llm usage | %s %s | input %d tokens, output %d tokens",
+                    usage.provider,
+                    usage.model,
+                    usage.input_tokens,
+                    usage.output_tokens,
+                )
+        await api.aclose()
 
-    ctx.add_shutdown_callback(log_latency_summary)
+    ctx.add_shutdown_callback(on_shutdown)
 
     await session.start(
-        agent=Receptionist(restaurant, now),
+        agent=Receptionist(state),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(noise_cancellation=select_noise_cancellation),
         ),
     )
+
+    # A quiet front-of-house hum, and keyboard sounds while a tool is working. Room calls only:
+    # console mode logs a warning and skips it.
+    background = BackgroundAudioPlayer(
+        ambient_sound=AudioConfig(BuiltinAudioClip.CROWDED_ROOM, volume=0.08),
+        thinking_sound=[
+            AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING, volume=0.5, probability=0.6),
+            AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING2, volume=0.4, probability=0.4),
+        ],
+    )
+    await background.start(room=ctx.room, agent_session=session)
+
+    limits.start()
     session.say(build_greeting(restaurant))
 
 
