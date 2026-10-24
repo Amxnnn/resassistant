@@ -3,7 +3,9 @@ from datetime import date, time
 import pytest
 
 from agent.speakable import (
+    join_or,
     normalize_phone,
+    on_day,
     space_out_long_numbers,
     speak_day,
     speak_numbers_digit_by_digit,
@@ -38,8 +40,21 @@ def test_times_days_and_codes_read_naturally():
     today = date(2026, 10, 24)
     assert speak_day(today, today) == "today"
     assert speak_day(date(2026, 10, 25), today) == "tomorrow"
-    assert speak_day(date(2026, 10, 31), today) == "Saturday 31 October"
+    assert speak_day(date(2026, 10, 31), today) == "Saturday the 31st"
+    assert speak_day(date(2026, 11, 2), today) == "Monday the 2nd"
+    assert speak_day(date(2026, 11, 13), today) == "Friday the 13th of November"  # two weeks out: month too
     assert spell_code("k7q2") == "K, 7, Q, 2"
+
+
+def test_days_in_running_speech():
+    today = date(2026, 10, 24)
+    assert on_day(today, today) == "today"
+    assert on_day(date(2026, 10, 25), today) == "tomorrow"
+    assert on_day(date(2026, 10, 27), today) == "on Tuesday"
+    assert on_day(date(2026, 11, 1), today) == "on Sunday the 1st"  # a week out: "on Sunday" is unclear
+    assert join_or(["8 PM"]) == "8 PM"
+    assert join_or(["8 PM", "9 PM"]) == "8 PM or 9 PM"
+    assert join_or(["8:30 PM", "8:45 PM", "9 PM"]) == "8:30 PM, 8:45 PM or 9 PM"
 
 
 @pytest.mark.parametrize(
@@ -62,3 +77,13 @@ async def test_numbers_split_across_streamed_chunks_are_still_spaced():
 
     out = "".join([c async for c in speak_numbers_digit_by_digit(chunks())])
     assert out == "Your number is 9 8 7 6 5, 4 3 2 1 0, right?"
+
+
+def test_llm_typography_is_made_plain_for_the_voice():
+    from agent.speakable import plain_punctuation
+
+    assert plain_punctuation("six PM, a multi‑level lot — we’re open") == (
+        "six PM, a multi-level lot, we're open"
+    )
+    assert plain_punctuation("open 12–3 PM and 6 – 11 PM") == "open 12 to 3 PM and 6 to 11 PM"
+    assert plain_punctuation("call 98765-43210") == "call 98765-43210"  # a hyphen is not a range

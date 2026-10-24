@@ -16,7 +16,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from ..speakable import speak_day, speak_time
+from ..speakable import join_or, speak_day, speak_time
 from .client import ApiError
 from .models import (
     Availability,
@@ -117,10 +117,6 @@ MENU = [
     ("Mango Kulfi", "Desserts", 200, ["vegetarian", "gluten_free"], None, ["dairy", "nuts"], True,
      "Frozen mango and pistachio cream."),
 ]  # fmt: skip
-
-
-def _join(items: list[str]) -> str:
-    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} or {items[-1]}"
 
 
 def _menu_items() -> list[MenuItem]:
@@ -323,7 +319,7 @@ class SampleRestaurantAPI:
         if not alternatives:
             day = speak_day(start.date(), self._today())
             return f"Sorry, we're fully booked for {party_size} {day}. Would another day work?"
-        times = _join([speak_time(s) for s in alternatives])
+        times = join_or([speak_time(s) for s in alternatives])
         return f"Sorry, {speak_time(start)} is taken for {party_size}. I can do {times}."
 
     def _require_restaurant(self, restaurant_id: UUID) -> None:

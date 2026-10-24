@@ -2,6 +2,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
+from livekit.agents.llm import ChatContext
 
 from agent.api_client import SAMPLE_RESTAURANT_PHONE, SampleRestaurantAPI
 from agent.api_client.sample import TZ
@@ -36,6 +37,26 @@ def agent(make_state) -> Receptionist:
     return Receptionist(make_state())
 
 
+class Speaker:
+    """A stand-in session: records what the agent says outside the LLM, and holds the history."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self.history = ChatContext()
+
+    @property
+    def said(self) -> list[str]:
+        return [text for text, _ in self.calls]
+
+    def say(self, text: str, **kwargs) -> SimpleNamespace:
+        self.calls.append((text, kwargs))
+        return SimpleNamespace(text=text)  # the speech handle
+
+
 def turn(state: CallState, speech_id: str) -> SimpleNamespace:
-    """A stand-in for RunContext: the tools only use userdata and the speech handle's id."""
-    return SimpleNamespace(userdata=state, speech_handle=SimpleNamespace(id=speech_id))
+    """A stand-in for RunContext: the tools use userdata, the speech handle and session.say."""
+    return SimpleNamespace(
+        userdata=state,
+        speech_handle=SimpleNamespace(id=speech_id, interrupted=False),
+        session=Speaker(),
+    )

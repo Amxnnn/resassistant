@@ -1,15 +1,22 @@
 """The receptionist agent and the function tools the LLM can call.
 
-Every write (book, change, cancel) takes two steps. A prepare_* tool checks it and returns a
-read-back; confirm_action carries it out, and refuses to run in the same turn as the prepare, so
+Every write (book, change, cancel) takes two steps. A prepare_* tool checks it and reads it back to
+the caller; confirm_action carries it out, and refuses to run in the same turn as the prepare, so
 the caller always gets a turn to say yes. When the phone line gives the caller's number, that
 number is used and anything the LLM passes instead is ignored.
+
+Lines that must be exact (read-backs, booking codes) or need no thought (asking for a missing
+detail, goodbye) are spoken by the tool itself, and the turn ends there. That skips the LLM's
+follow-up request: about a second sooner for the caller, and a request's worth of the free tier's
+tokens saved.
 """
 
 from __future__ import annotations
 
+import asyncio
+import random
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from time import monotonic
@@ -17,7 +24,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from livekit.agents import Agent, ModelSettings, RunContext, function_tool, llm
+from livekit.agents import Agent, ModelSettings, RunContext, StopResponse, ToolResult, function_tool, llm
 from livekit.agents.voice.speech_handle import SpeechHandle
 
 from agent.api_client import ApiError, RestaurantAPI
@@ -30,9 +37,12 @@ from agent.api_client.models import (
     RestaurantSettings,
     UpdateReservationRequest,
 )
-from agent.prompts import build_instructions
+from agent.facts import Facts
+from agent.prompts import LOOKUP_TOOLS, build_instructions
 from agent.speakable import (
+    join_or,
     normalize_phone,
+    on_day,
     speak_day,
     speak_in_phrases,
     speak_phone,
@@ -49,17 +59,38 @@ MessageTopic = Literal["large_party", "event", "catering", "callback", "other"]
 AVAILABILITY_REUSE_SECONDS = 90
 OUTCOME_FOR = {"book": "booked", "change": "changed", "cancel": "cancelled"}
 
+# The conversation the LLM sees: the instructions and the latest items, not the whole call. Every
+# request resends it, and the free tiers cap tokens per minute. A booking in progress lives in
+# CallState, so it doesn't depend on old turns.
+MAX_HISTORY_ITEMS = 24
+
+# Said once per reply when an API call is still running after FILLER_AFTER_SECONDS, so a caller
+# never sits in silence during a slow lookup. Fast lookups (most of them) say nothing.
+FILLERS = ("One moment.", "Let me check.", "Just a second.")
+FILLER_AFTER_SECONDS = 0.7
+
+READ_BACK = ("Just to confirm:", "Let me read that back:")
+ANYTHING_ELSE = ("Anything else I can help with?", "Is there anything else I can do for you?")
+
 NOT_CONFIRMED_YET = "The caller hasn't confirmed yet. Read it back and wait for a clear yes."
 NOT_DONE_YET = "The caller hasn't said goodbye, so don't hang up. Ask if there's anything else."
+NOTHING_TO_CHANGE = "That's how the booking already is. Ask what they'd like to change."
 
 # A caller winding the call up. end_call is refused unless their last words match this: hanging up
 # on someone mid-conversation is far worse than staying on, and the silence timer in
 # call_limits.py still ends a call that has gone quiet.
 _GOODBYE = re.compile(
-    r"\b(bye|goodbye|good night|see you|thanks|thank you|no thanks|nothing else|that'?s (all|it|everything)"
-    r"|that will be all|i'?m (done|good|all set)|have a (good|nice|great))\b",
+    r"\b(bye|goodbye|good night|see you|take care|cheers|thanks|thank you|no thanks|nothing (else|more)"
+    r"|that'?s (all|it|everything|fine)|that is all|that'?ll be all|that will be all|all good"
+    r"|i'?m (done|good|all set)|have a (good|nice|great))\b",
     re.IGNORECASE,
 )
+
+# What an LLM writes as guest_name when the caller hasn't given one.
+_NOT_A_NAME = {
+    "", "guest", "caller", "the caller", "customer", "client", "user", "unknown", "anonymous", "none",
+    "n a", "na", "name", "not given", "not provided", "sir", "madam", "mr", "mrs", "ms",
+}  # fmt: skip
 
 
 def new_call_id() -> str:
@@ -88,6 +119,9 @@ class CallState:
     pending: PendingAction | None = None
     end_call: Callable[[SpeechHandle], None] | None = None  # hangs up after that speech
     outcomes: list[str] = field(default_factory=list)  # what this call achieved, for the call log
+    filler_spoken_in: str | None = None  # speech id of the reply that already said a filler
+    told_free: tuple[date, str, int] | None = None  # the request the caller last heard is free
+    booked_on: date | None = None  # the day of the booking made on this call, for the goodbye
     _availability: dict[tuple[date, str, int], tuple[float, Availability]] = field(
         default_factory=dict, repr=False
     )
@@ -124,6 +158,11 @@ class CallState:
         start = res.start.astimezone(self.tz)
         day = speak_day(start.date(), self.today())
         return f"a table for {res.party_size} under {res.guest_name}, {day} at {speak_time(start)}"
+
+    def when(self, start: datetime) -> str:
+        """ "on Tuesday at 8 PM": for running speech; read-backs use the full date."""
+        start = start.astimezone(self.tz)
+        return f"{on_day(start.date(), self.today())} at {speak_time(start)}"
 
 
 def _parse_time(value: str) -> time | None:
@@ -177,11 +216,34 @@ def resolve_day(s: CallState, said: str) -> date | str:
     return ASK_WHICH_DAY
 
 
+def real_name(guest_name: str | None) -> str | None:
+    """The caller's name, or None for the stand-ins an LLM writes when it doesn't have one."""
+    name = " ".join((guest_name or "").split())
+    return None if re.sub(r"[\W_]+", " ", name.lower()).strip() in _NOT_A_NAME else name
+
+
 def _availability_reply(availability: Availability) -> str:
     if availability.requested_time_available:
         return availability.summary
     # Small models tend to jump straight to the alternatives; the caller needs to hear "no" first.
     return f"{availability.summary} (First tell the caller their time is taken, then offer these.)"
+
+
+def _taken_line(s: CallState, day: date, at: time, availability: Availability) -> str:
+    """The requested time is gone: say so first, then the nearest free times."""
+    if not availability.slots:
+        return f"Sorry, we're fully booked {on_day(day, s.today())}. Would another day work?"
+    times = []
+    for slot in availability.slots:
+        start = slot.start.astimezone(s.tz)
+        times.append(speak_time(start) if start.date() == day else s.when(start))
+    return f"Sorry, {speak_time(at)} is taken. I can do {join_or(times)}. Would one of those work?"
+
+
+def _goodbye(s: CallState) -> str:
+    if s.booked_on:
+        return f"Thanks for calling, and we'll see you {on_day(s.booked_on, s.today())}! Goodbye."
+    return f"Thanks for calling {s.restaurant.name}. Take care, goodbye!"
 
 
 def _last_caller_words(context: RunContext[CallState]) -> str:
@@ -191,16 +253,79 @@ def _last_caller_words(context: RunContext[CallState]) -> str:
     return ""
 
 
+def _instructions(state: CallState, **kwargs) -> str:
+    return build_instructions(state.restaurant, caller_id_known=state.caller_phone is not None, **kwargs)
+
+
 class Receptionist(Agent):
-    def __init__(self, state: CallState) -> None:
+    def __init__(self, state: CallState | None = None) -> None:
+        """Without a state, the agent stays silent until begin(), so a call can set up its audio
+        while the restaurant's settings are still loading."""
         super().__init__(
-            instructions=build_instructions(state.restaurant, caller_id_known=state.caller_phone is not None),
+            instructions=_instructions(state) if state else "The call is still connecting. Say nothing."
         )
+        self._ready = state is not None
+
+    async def begin(self, state: CallState) -> None:
+        """The restaurant's settings are in: take on its instructions and start answering."""
+        await self.update_instructions(_instructions(state))
+        self._ready = True
+
+    async def use_facts(self, state: CallState, facts: Facts) -> None:
+        """Put the menu and info in the prompt, and drop the lookup tools the facts make redundant.
+
+        Each tool's description is resent with every request, and a lookup the facts already answer
+        costs an API round trip plus a second LLM request.
+        """
+        redundant = set()
+        if facts.all_info:
+            redundant.add("get_restaurant_info")
+        if facts.whole_menu:
+            redundant.add("search_menu")
+        lookups = [t for t in LOOKUP_TOOLS if t not in redundant]
+        await self.update_instructions(_instructions(state, facts=facts.text, lookups=lookups))
+        await self.update_tools([t for t in self.tools if t.id not in redundant])
+
+    async def on_user_turn_completed(self, turn_ctx: llm.ChatContext, new_message: llm.ChatMessage) -> None:
+        if not self._ready:  # the caller spoke before the greeting; the greeting answers them
+            raise StopResponse()
 
     async def llm_node(self, chat_ctx: llm.ChatContext, tools: list[llm.Tool], model_settings: ModelSettings):
-        """The default LLM step, split into short spoken phrases so the voice starts sooner."""
+        """The default LLM step on the recent history, split into short spoken phrases so the voice
+        starts sooner."""
+        chat_ctx = chat_ctx.copy()
+        chat_ctx.truncate(max_items=MAX_HISTORY_ITEMS)
         async for chunk in speak_in_phrases(Agent.default.llm_node(self, chat_ctx, tools, model_settings)):
             yield chunk
+
+    async def _waiting[T](self, context: RunContext[CallState], call: Awaitable[T]) -> T:
+        """Await an API call; if it's slow, say a short filler so the caller isn't left in silence."""
+        s = context.userdata
+        say = getattr(getattr(context, "session", None), "say", None)
+        speech_id = context.speech_handle.id
+        if say is None or s.filler_spoken_in == speech_id:
+            return await call
+
+        async def filler() -> None:
+            await asyncio.sleep(FILLER_AFTER_SECONDS)
+            s.filler_spoken_in = speech_id
+            say(random.choice(FILLERS), add_to_chat_ctx=False)
+
+        task = asyncio.create_task(filler())
+        try:
+            return await call
+        finally:
+            task.cancel()
+
+    def _say(self, context: RunContext[CallState], line: str, note: str) -> ToolResult:
+        """Say a fixed line to the caller and end the turn there, with no follow-up LLM request.
+
+        `note` is the result the LLM sees in later turns; the line itself joins its history as speech.
+        """
+        if context.speech_handle.interrupted:  # the caller cut in: their new turn takes over
+            return ToolResult(f"{note} (Not said: the caller interrupted.)", reply_required=False)
+        context.session.say(line)
+        return ToolResult(note, reply_required=False)
 
     def _accept_phone(self, s: CallState, phone_number: str | None) -> str | None:
         """The caller ID if there is one; otherwise the number the caller said, if it's valid."""
@@ -215,7 +340,7 @@ class Receptionist(Agent):
         """If the restaurant facts don't cover it: hours, location, parking, delivery, specials, policies."""
         s = context.userdata
         try:
-            return (await s.api.get_info(s.restaurant.id, topic)).summary
+            return (await self._waiting(context, s.api.get_info(s.restaurant.id, topic))).summary
         except ApiError as e:
             return e.say
 
@@ -234,11 +359,13 @@ class Receptionist(Agent):
         s = context.userdata
         note = ""
         try:
-            result = await s.api.search_menu(s.restaurant.id, query=query, dietary=dietary)
+            result = await self._waiting(
+                context, s.api.search_menu(s.restaurant.id, query=query, dietary=dietary)
+            )
             if not result.items and query and dietary:
                 # "Does the aloo gobi have nuts?" often arrives as query + a nut_free filter. An empty
                 # result would read as "not on the menu", so answer about the dish itself.
-                result = await s.api.search_menu(s.restaurant.id, query=query)
+                result = await self._waiting(context, s.api.search_menu(s.restaurant.id, query=query))
                 if result.items:
                     tags = " or ".join(d.replace("_", " ") for d in dietary)
                     note = f"(These aren't tagged {tags}; answer from the allergen details.) "
@@ -264,7 +391,7 @@ class Receptionist(Agent):
     async def check_availability(
         self, context: RunContext[CallState], day: str, time: str, party_size: int
     ) -> str:
-        """Check if a table is free.
+        """Only when the caller asks whether a time is free without booking yet.
 
         Args:
             day: The day as the caller said it: "Tuesday", "tomorrow", "27th", or YYYY-MM-DD.
@@ -277,67 +404,101 @@ class Receptionist(Agent):
             return found
         day = found
         try:
-            availability = await s.api.check_availability(s.restaurant.id, day, time, party_size)
+            availability = await self._waiting(
+                context, s.api.check_availability(s.restaurant.id, day, time, party_size)
+            )
         except ApiError as e:
             return e.say
         s.remember_availability(day, time, party_size, availability)
+        if availability.requested_time_available:
+            s.told_free = (day, time, party_size)
         return _availability_reply(availability)
 
     @function_tool()
     async def prepare_booking(
         self,
         context: RunContext[CallState],
-        guest_name: str,
         party_size: int,
         day: str,
         time: str,
+        guest_name: str | None = None,
         phone_number: str | None = None,
         notes: str | None = None,
-    ) -> str:
-        """Validate a new booking and get the read-back. Books nothing.
+    ) -> str | ToolResult:
+        """Check the table, ask the caller for anything missing, then read the booking back. Books nothing.
 
         Args:
             day: The day as the caller said it: "Tuesday", "tomorrow", "27th", or YYYY-MM-DD.
             time: 24-hour HH:MM.
+            guest_name: Only once the caller has said it.
             phone_number: Only if there's no caller ID.
             notes: Special requests.
         """
         s = context.userdata
-        if _parse_time(time) is None:
+        if (at := _parse_time(time)) is None:
             return "Use time as 24-hour HH:MM."
         if isinstance(found := resolve_day(s, day), str):
             return found
         day = found
-        # Availability first: if the time is taken, the caller should hear that before giving details.
         # Reuse the check the caller just heard instead of a second round trip to the database.
         availability = s.recent_availability(day, time, party_size)
         if availability is None:
             try:
-                availability = await s.api.check_availability(s.restaurant.id, day, time, party_size)
+                availability = await self._waiting(
+                    context, s.api.check_availability(s.restaurant.id, day, time, party_size)
+                )
             except ApiError as e:
                 return e.say
             s.remember_availability(day, time, party_size, availability)
         if not availability.requested_time_available:
-            return _availability_reply(availability)
+            return self._say(
+                context,
+                _taken_line(s, day, at, availability),
+                "Told the caller that time is taken and offered the nearest free times.",
+            )
+        start = availability.slots[0].start.astimezone(s.tz)
+        heard_free = s.told_free == (day, time, party_size)
+        s.told_free = (day, time, party_size)
+        name = real_name(guest_name)
+        if name is None:
+            news = "" if heard_free else f"Good news, we have a table for {party_size} {s.when(start)}. "
+            return self._say(
+                context, f"{news}What name should I put the booking under?", "It's free. Asked for the name."
+            )
         phone = self._accept_phone(s, phone_number)
         if phone is None:
-            return "That time is free. Ask the caller for their full phone number, then prepare it again."
-        slot = availability.slots[0]
+            lead = (
+                f"Thanks, {name}."
+                if heard_free
+                else f"Good news, we have a table for {party_size} {s.when(start)}."
+            )
+            return self._say(
+                context,
+                f"{lead} What's the best phone number for the booking?",
+                "It's free. Asked for a phone number.",
+            )
         request = CreateReservationRequest(
             restaurant_id=s.restaurant.id,
             idempotency_key=uuid4(),
-            guest_name=guest_name,
+            guest_name=name,
             guest_phone=phone,
             party_size=party_size,
-            start=slot.start,
+            start=start,
             notes=notes,
             call_id=s.call_id,
         )
         s.pending = PendingAction("book", request, prepared_in=context.speech_handle.id)
-        phone_part = "" if s.caller_phone else f", phone {speak_phone(phone)}"
-        return (
-            "Not booked yet. Read this back and ask the caller to confirm: "
-            f"a table for {party_size} under {guest_name}, {slot.label}{phone_part}."
+        day_and_time = f"{speak_day(start.date(), s.today())} at {speak_time(start)}"
+        details = f"a table for {party_size} under {name}, {day_and_time}"
+        if not s.caller_phone:
+            details += f", and your number is {speak_phone(phone)}"
+        if notes:
+            details += f", with the note: {notes}"
+        lead = random.choice(READ_BACK) if heard_free else "Good news, that time's free. Just to confirm:"
+        return self._say(
+            context,
+            f"{lead} {details}. Shall I book it?",
+            f"Read back {details}. Not booked yet: wait for a clear yes.",
         )
 
     @function_tool()
@@ -357,7 +518,9 @@ class Receptionist(Agent):
         if not booking_code and not phone:
             return "Ask for the booking code or the phone number the booking was made with."
         try:
-            result = await s.api.find_reservations(s.restaurant.id, phone=phone, code=booking_code)
+            result = await self._waiting(
+                context, s.api.find_reservations(s.restaurant.id, phone=phone, code=booking_code)
+            )
         except ApiError as e:
             return e.say
         if not result.reservations:
@@ -365,9 +528,10 @@ class Receptionist(Agent):
         found = "; ".join(f"{s.describe(r)}, code {spell_code(r.code)}" for r in result.reservations)
         return f"Found: {found}."
 
-    async def _find_one(self, s: CallState, booking_code: str) -> Reservation | str:
+    async def _find_one(self, context: RunContext[CallState], booking_code: str) -> Reservation | str:
+        s = context.userdata
         try:
-            result = await s.api.find_reservations(s.restaurant.id, code=booking_code)
+            result = await self._waiting(context, s.api.find_reservations(s.restaurant.id, code=booking_code))
         except ApiError as e:
             return e.say
         if not result.reservations:
@@ -382,15 +546,15 @@ class Receptionist(Agent):
         new_day: str | None = None,
         new_time: str | None = None,
         new_party_size: int | None = None,
-    ) -> str:
-        """Validate a change to a booking and get the read-back. Changes nothing.
+    ) -> str | ToolResult:
+        """Read back a change to a booking. Changes nothing.
 
         Args:
             new_day: The new day as the caller said it: "Tuesday", "tomorrow", "27th", or YYYY-MM-DD.
             new_time: 24-hour HH:MM.
         """
         s = context.userdata
-        res = await self._find_one(s, booking_code)
+        res = await self._find_one(context, booking_code)
         if isinstance(res, str):
             return res
         current = res.start.astimezone(s.tz)
@@ -402,33 +566,44 @@ class Receptionist(Agent):
             return "Use time as 24-hour HH:MM."
         start = datetime.combine(day, at, s.tz)
         party_size = new_party_size or res.party_size
+        if start == current and party_size == res.party_size:
+            return NOTHING_TO_CHANGE
         request = UpdateReservationRequest(
             guest_phone=s.phone, code=res.code, start=start, party_size=party_size
         )
         s.pending = PendingAction(
             "change", request, prepared_in=context.speech_handle.id, reservation_id=res.id
         )
-        return (
-            "Not changed yet. Read this back and ask the caller to confirm: change "
-            f"{s.describe(res)} to a table for {party_size}, "
-            f"{speak_day(day, s.today())} at {speak_time(start)}."
+        change = (
+            f"your table for {res.party_size} {s.when(current)} becomes a table for {party_size}, "
+            f"{speak_day(day, s.today())} at {speak_time(start)}"
+        )
+        return self._say(
+            context,
+            f"{random.choice(READ_BACK)} {change}. Is that right?",
+            f"Read back: {change}. Not changed yet: wait for a clear yes.",
         )
 
     @function_tool()
-    async def prepare_cancel(self, context: RunContext[CallState], booking_code: str) -> str:
-        """Get the read-back for cancelling a booking. Cancels nothing."""
+    async def prepare_cancel(self, context: RunContext[CallState], booking_code: str) -> str | ToolResult:
+        """Read back the cancellation of a booking. Cancels nothing."""
         s = context.userdata
-        res = await self._find_one(s, booking_code)
+        res = await self._find_one(context, booking_code)
         if isinstance(res, str):
             return res
         request = CancelReservationRequest(idempotency_key=uuid4(), guest_phone=s.phone, code=res.code)
         s.pending = PendingAction(
             "cancel", request, prepared_in=context.speech_handle.id, reservation_id=res.id
         )
-        return f"Not cancelled yet. Read this back and ask the caller to confirm: cancel {s.describe(res)}."
+        booking = f"your table for {res.party_size} {s.when(res.start)}, under {res.guest_name}"
+        return self._say(
+            context,
+            f"Just to confirm, you'd like to cancel {booking}?",
+            f"Read back the cancellation of {s.describe(res)}. Not cancelled yet: wait for a clear yes.",
+        )
 
     @function_tool()
-    async def confirm_action(self, context: RunContext[CallState]) -> str:
+    async def confirm_action(self, context: RunContext[CallState]) -> str | ToolResult:
         """Carry out the prepared booking, change or cancellation, only after a clear yes."""
         s = context.userdata
         pending = s.pending
@@ -438,19 +613,38 @@ class Receptionist(Agent):
             return NOT_CONFIRMED_YET
         try:
             if pending.kind == "book":
-                res = await s.api.create_reservation(pending.request)  # type: ignore[arg-type]
+                res = await self._waiting(context, s.api.create_reservation(pending.request))  # type: ignore[arg-type]
             elif pending.kind == "change":
-                res = await s.api.update_reservation(pending.reservation_id, pending.request)  # type: ignore[arg-type]
+                res = await self._waiting(
+                    context,
+                    s.api.update_reservation(pending.reservation_id, pending.request),  # type: ignore[arg-type]
+                )
             else:
-                res = await s.api.cancel_reservation(pending.reservation_id, pending.request)  # type: ignore[arg-type]
+                res = await self._waiting(
+                    context,
+                    s.api.cancel_reservation(pending.reservation_id, pending.request),  # type: ignore[arg-type]
+                )
         except ApiError as e:
             s.pending = None
             return e.say
         s.pending = None
         s.outcomes.append(OUTCOME_FOR[pending.kind])
-        if pending.kind == "cancel":
-            return f"Done. {res.summary}"
-        return f"Done. {res.summary} Tell the caller the code slowly: {spell_code(res.code)}."
+        if pending.kind == "book":
+            s.booked_on = res.start.astimezone(s.tz).date()
+            line = f"You're all set! Your booking code is {spell_code(res.code)}."
+        elif pending.kind == "change":
+            line = (
+                f"Done, it's now a table for {res.party_size} {s.when(res.start)}. "
+                f"Your code is still {spell_code(res.code)}."
+            )
+        else:
+            s.booked_on = None
+            line = "Done, that booking is cancelled."
+        return self._say(
+            context,
+            f"{line} {random.choice(ANYTHING_ELSE)}",
+            f"Done and told the caller. {res.summary}",
+        )
 
     @function_tool()
     async def take_message(
@@ -460,7 +654,7 @@ class Receptionist(Agent):
         topic: MessageTopic,
         details: str,
         phone_number: str | None = None,
-    ) -> str:
+    ) -> str | ToolResult:
         """Leave a message for the manager: large parties, events, catering, or to reach a person.
 
         Args:
@@ -480,17 +674,23 @@ class Receptionist(Agent):
             call_id=s.call_id,
         )
         try:
-            receipt = await s.api.create_message(request)
+            receipt = await self._waiting(context, s.api.create_message(request))
         except ApiError as e:
             return e.say
         s.outcomes.append("message_taken")
-        return receipt.summary
+        return self._say(
+            context,
+            f"{receipt.summary} {random.choice(ANYTHING_ELSE)}",
+            f"Message saved and the caller told: {receipt.summary}",
+        )
 
     @function_tool()
-    async def end_call(self, context: RunContext[CallState]) -> str:
-        """Hang up, only once the caller has said goodbye or that they're done. Call before your goodbye."""
+    async def end_call(self, context: RunContext[CallState]) -> str | ToolResult:
+        """Say goodbye and hang up, only once the caller has said goodbye or that they're done."""
         if not _GOODBYE.search(_last_caller_words(context)):
             return NOT_DONE_YET
-        if context.userdata.end_call:
-            context.userdata.end_call(context.speech_handle)
-        return "Now say a short, warm goodbye."
+        s = context.userdata
+        goodbye = context.session.say(_goodbye(s))
+        if s.end_call:
+            s.end_call(goodbye)
+        return ToolResult("Said goodbye. The call is ending.", reply_required=False)

@@ -8,6 +8,7 @@ with the contract's error code and speakable `say`.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from typing import Protocol
 from uuid import UUID
@@ -33,6 +34,15 @@ from .models import (
 )
 
 UNREACHABLE_SAY = "Sorry, I can't reach our booking system right now. Can I take a message instead?"
+# One quick retry for a dropped connection or a server error. Safe for every call: GETs and PATCH
+# are idempotent, and every POST carries an idempotency key. Timeouts aren't retried: the caller
+# has already waited the full timeout once.
+RETRY_STATUSES = {500, 502, 503, 504}
+RETRY_DELAY_SECONDS = 0.3
+# Writes get longer than reads. A write that times out may still have gone through on the server,
+# and telling the caller "I couldn't book that" when it did is worse than a longer wait; the
+# filler line covers the wait. Booking writes take ~3 s on the current dev setup.
+WRITE_TIMEOUT_SECONDS = 10.0
 
 
 class ApiError(Exception):
@@ -112,10 +122,21 @@ class HttpRestaurantAPI:
     ) -> M:
         json = body.model_dump(mode="json", exclude_none=True) if body else None
         params = {k: v for k, v in (params or {}).items() if v is not None}
-        try:
-            resp = await self._http.request(method, path, params=params, json=json)
-        except httpx.HTTPError as e:
-            raise ApiError("unreachable", UNREACHABLE_SAY) from e
+        timeout = httpx.USE_CLIENT_DEFAULT if method == "GET" else WRITE_TIMEOUT_SECONDS
+        for attempt in (1, 2):
+            try:
+                resp = await self._http.request(method, path, params=params, json=json, timeout=timeout)
+            except httpx.TimeoutException as e:
+                raise ApiError("unreachable", UNREACHABLE_SAY) from e
+            except httpx.HTTPError as e:
+                if attempt == 1:
+                    await asyncio.sleep(RETRY_DELAY_SECONDS)
+                    continue
+                raise ApiError("unreachable", UNREACHABLE_SAY) from e
+            if resp.status_code in RETRY_STATUSES and attempt == 1:
+                await asyncio.sleep(RETRY_DELAY_SECONDS)
+                continue
+            break
         if resp.is_success:
             return model.model_validate(resp.json())
         try:

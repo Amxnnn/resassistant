@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from agent.api_client.models import RestaurantSettings
@@ -22,19 +23,29 @@ def _calendar_lines(restaurant: RestaurantSettings) -> str:
     return "\n".join(lines)
 
 
-NO_FACTS_YET = "Not loaded yet: use get_restaurant_info and search_menu."
+NO_FACTS_YET = "Not loaded yet."
+# The tools that look up what the facts would hold. Once the facts are in the prompt they're dropped,
+# unless the facts are incomplete (Receptionist.use_facts).
+LOOKUP_TOOLS = ("get_restaurant_info", "search_menu")
+
+
+def _lookup_rule(lookups: Sequence[str]) -> str:
+    if not lookups:
+        return "If they don't cover it, say you don't have that detail and offer to take a message."
+    return f"If they don't cover it, use {' or '.join(lookups)} before saying you don't know."
 
 
 def build_instructions(
-    restaurant: RestaurantSettings, *, caller_id_known: bool, facts: str | None = None, language: str = "en"
+    restaurant: RestaurantSettings,
+    *,
+    caller_id_known: bool,
+    facts: str | None = None,
+    lookups: Sequence[str] = LOOKUP_TOOLS,
+    language: str = "en",
 ) -> str:
     template = (_TEMPLATES / f"receptionist_{language}.md").read_text(encoding="utf-8")
     now = restaurant.now
-    phone_rule = (
-        ". You already have their number from the phone line, so don't ask for it."
-        if caller_id_known
-        else ", and their phone number."
-    )
+    phone_rule = " You have their number from the phone line, so never ask for it." if caller_id_known else ""
     return template.format(
         restaurant_name=restaurant.name,
         now=f"{now:%A} {now.day} {now:%B %Y}, {speak_time(now)}",
@@ -43,18 +54,22 @@ def build_instructions(
         hours=restaurant.hours_summary,
         party_limit=restaurant.phone_party_limit,
         phone_rule=phone_rule,
+        lookup=_lookup_rule(lookups),
         facts=facts or NO_FACTS_YET,
     )
 
 
 def build_greeting(restaurant: RestaurantSettings) -> str:
-    """Opening line: who we are, that this is an AI, how to reach staff, and the recording notice."""
+    """Opening line: who we are, that this is an AI, how to reach staff, and the recording notice.
+
+    As short as the required points allow: the caller waits through every word of it.
+    """
     parts = [
         restaurant.greeting,
         # Staff can't take calls in this test build, so the route to a person is a message.
-        "I'm the restaurant's AI assistant, and I can pass a message to our staff at any time.",
+        "I'm the AI assistant, and I can pass a message to our staff anytime.",
     ]
     if restaurant.recording_enabled:
-        parts.append("This call is recorded to help us improve.")
+        parts.append("This call is recorded for quality.")
     parts.append("How can I help?")
     return " ".join(parts)

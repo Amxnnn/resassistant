@@ -57,3 +57,40 @@ async def test_network_failures_and_non_contract_errors_still_give_a_sentence_to
             await client(handler).get_info(RESTAURANT_ID, "parking")
         assert err.value.code == code
         assert "take a message" in err.value.say
+
+
+def flaky(*responses):
+    """A transport that answers with each response (or raises each exception) in turn."""
+    calls = iter(responses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nxt = next(calls)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
+
+    return handler
+
+
+async def test_a_server_error_or_dropped_connection_is_retried_once():
+    ok = httpx.Response(200, json=INFO)
+    for first in (httpx.Response(500, text="pool exhausted"), httpx.ConnectError("reset")):
+        answer = await client(flaky(first, ok)).get_info(RESTAURANT_ID, "parking")
+        assert answer.summary == "Free valet from 6 PM."
+
+
+async def test_a_second_failure_or_a_timeout_is_not_retried():
+    with pytest.raises(ApiError) as err:
+        await client(flaky(httpx.Response(503), httpx.Response(503))).get_info(RESTAURANT_ID, "parking")
+    assert err.value.status == 503
+
+    with pytest.raises(ApiError) as err:  # only one response queued: a retry would fail differently
+        await client(flaky(httpx.ReadTimeout("slow"))).get_info(RESTAURANT_ID, "parking")
+    assert err.value.code == "unreachable"
+
+
+async def test_business_errors_are_not_retried():
+    error = httpx.Response(409, json={"error": {"code": "slot_taken", "say": "Taken."}})
+    with pytest.raises(ApiError) as err:
+        await client(flaky(error)).get_info(RESTAURANT_ID, "parking")
+    assert err.value.code == "slot_taken"

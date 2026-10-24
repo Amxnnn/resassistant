@@ -42,7 +42,7 @@ async def test_settings_calendar_shows_closures_and_today(restaurant):
 async def test_free_time_is_offered_back_as_the_only_slot(api):
     result = await api.check_availability(RESTAURANT_ID, TUESDAY, "19:30", 4)
     assert result.requested_time_available
-    assert [s.label for s in result.slots] == ["Tuesday 27 October at 7:30 PM"]
+    assert [s.label for s in result.slots] == ["Tuesday the 27th at 7:30 PM"]
 
 
 async def test_full_time_offers_the_three_closest_open_times(api):
@@ -80,7 +80,7 @@ async def test_booking_rules_return_the_contract_error_codes(api, day, hhmm, par
 async def test_booking_takes_the_smallest_table_and_blocks_double_booking(api):
     first = await api.create_reservation(booking(TUESDAY, "19:30", 8))
     assert first.status == "confirmed"
-    assert first.summary == f"Table for 8, Tuesday 27 October at 7:30 PM, code {first.code}."
+    assert first.summary == f"Table for 8, Tuesday the 27th at 7:30 PM, code {first.code}."
     with pytest.raises(ApiError) as err:
         await api.create_reservation(booking(TUESDAY, "20:00", 7))  # the only 8-top is taken
     assert err.value.code == "slot_taken" and err.value.status == 409

@@ -62,7 +62,7 @@ async def call():
             # As in a real call: the menu and info join the prompt once loaded.
             facts = await load_facts(api, restaurant)
             await agent.update_instructions(
-                build_instructions(restaurant, caller_id_known=False, facts=facts)
+                build_instructions(restaurant, caller_id_known=False, facts=facts.text if facts else None)
             )
             yield SimpleNamespace(session=session, state=state, api=api)
 

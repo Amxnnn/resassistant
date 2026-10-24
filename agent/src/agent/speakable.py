@@ -17,13 +17,33 @@ def speak_time(t: datetime | time) -> str:
     return f"{hour}{minutes} {'AM' if t.hour < 12 else 'PM'}"
 
 
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 11 <= n % 100 <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
 def speak_day(d: date, today: date) -> str:
-    """today, tomorrow, or Saturday 7 November."""
+    """today, tomorrow, Saturday the 31st, or Friday the 25th of December more than two weeks out.
+
+    Dates the way people say them on the phone, not "Saturday 31 October".
+    """
     if d == today:
         return "today"
     if d == today + timedelta(days=1):
         return "tomorrow"
-    return f"{d:%A} {d.day} {d:%B}"
+    day = f"{d:%A} the {_ordinal(d.day)}"
+    return day if d - today < timedelta(days=14) else f"{day} of {d:%B}"
+
+
+def on_day(d: date, today: date) -> str:
+    """For running speech: "today", "tomorrow", "on Saturday", "on Friday the 25th of December"."""
+    if d - today < timedelta(days=2):
+        return speak_day(d, today)
+    return f"on {d:%A}" if d - today < timedelta(days=7) else f"on {speak_day(d, today)}"
+
+
+def join_or(items: list[str]) -> str:
+    """a; a or b; a, b or c."""
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} or {items[-1]}"
 
 
 def normalize_phone(raw: str, default_country_code: str = "91") -> str | None:
@@ -132,3 +152,37 @@ def _content(chunk: Any) -> str | None:
     if delta is None or delta.tool_calls:
         return None
     return delta.content
+
+
+# Typography the LLM likes (gpt-oss writes "six PM" and "multi‑level") that can make a
+# TTS pause oddly or skip a word: narrow and non-breaking spaces, special hyphens, curly quotes.
+_PLAIN = str.maketrans(
+    {
+        " ": " ",
+        " ": " ",
+        " ": " ",
+        "‐": "-",
+        "‑": "-",
+        "‒": "-",
+        "‘": "'",
+        "’": "'",
+        "“": '"',
+        "”": '"',
+        "…": "...",
+    }
+)
+
+
+_RANGE_DASH = re.compile(r"(\d)\s*[–—]\s*(\d)")  # "12" en-dash "3 PM" -> "12 to 3 PM"
+_DASH = re.compile(r"\s*[–—]\s*")  # an aside -> a comma pause
+
+
+def plain_punctuation(text: str) -> str:
+    text = _RANGE_DASH.sub(r"\1 to \2", text)
+    return _DASH.sub(", ", text).translate(_PLAIN)
+
+
+async def speak_plain_punctuation(chunks: AsyncIterable[str]) -> AsyncIterator[str]:
+    """TTS text transform: plain_punctuation on each streamed chunk (characters never split)."""
+    async for chunk in chunks:
+        yield plain_punctuation(chunk)

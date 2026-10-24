@@ -13,7 +13,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from dotenv import load_dotenv
 from livekit import rtc
@@ -38,9 +38,10 @@ from agent.call_limits import CallLimits
 from agent.call_log import build_call_log, save_call_log
 from agent.facts import load_facts
 from agent.metrics import LatencyTracker
-from agent.prompts import build_greeting, build_instructions
-from agent.speakable import speak_numbers_digit_by_digit
+from agent.prompts import build_greeting
+from agent.speakable import speak_numbers_digit_by_digit, speak_plain_punctuation
 from agent.tools import CallState, Receptionist, new_call_id
+from agent.turn_taking import QUICK, TurnTaking
 
 if TYPE_CHECKING:
     from livekit.agents.voice.room_io.types import NoiseCancellationParams
@@ -53,11 +54,17 @@ _background_tasks: set[asyncio.Task[None]] = set()
 # their hidden reasoning against this cap, so a tight cap cuts the spoken answer off mid-sentence.
 MAX_REPLY_TOKENS = 600
 
-
 # Groq's free tier counts its per-minute and per-day token limits per model, so each model in this
 # list is a separate budget. gpt-oss-120b first: as fast as 20b here (~0.4-0.6 s to first token)
 # and better at following the prompt and tools.
 DEFAULT_GROQ_MODELS = "openai/gpt-oss-120b,openai/gpt-oss-20b"
+
+# A model that failed (usually on a rate limit) sits out this long, then the next real request tries
+# it again. Groq's per-minute windows reopen within seconds; a model out of its daily tokens just
+# fails again, which costs that request about 0.2 s before the next model answers.
+RETRY_FAILED_LLM_AFTER = 20.0
+
+NOT_SET_UP = "Sorry, this number isn't set up yet. Please try again later. Goodbye!"
 
 
 def groq_models() -> list[str]:
@@ -65,8 +72,11 @@ def groq_models() -> list[str]:
 
 
 def groq_llm(model: str | None = None) -> llm.LLM:
-    # The plugin sets reasoning_effort="low" for gpt-oss models.
-    return groq.LLM(model=model or groq_models()[0], max_completion_tokens=MAX_REPLY_TOKENS)
+    # The plugin sets reasoning_effort="low" for gpt-oss models. One tool call per reply: a tool that
+    # speaks for itself ends the turn, and a second call alongside it would get a reply on top.
+    return groq.LLM(
+        model=model or groq_models()[0], max_completion_tokens=MAX_REPLY_TOKENS, parallel_tool_calls=False
+    )
 
 
 class ForeignCallSignatures(dict[str, bytes]):
@@ -99,6 +109,32 @@ def gemini_llm() -> llm.LLM:
     return gemini
 
 
+class NoProbeFallbackAdapter(llm.FallbackAdapter):
+    """LiveKit's FallbackAdapter without its recovery probes.
+
+    To learn whether a failed model works again, the adapter re-sends the whole failed request in the
+    background and throws the answer away. On the free tiers that spends a request's worth of tokens
+    (~2,500) from the per-minute budget that just ran out. Here a failed model rejoins the chain after
+    RETRY_FAILED_LLM_AFTER seconds, and the next real request finds out.
+    """
+
+    def chat(self, **kwargs: Any) -> llm.LLMStream:
+        stream = super().chat(**kwargs)
+        # Private hook, replaced before the stream's task first runs; tests/test_llm_setup.py pins it.
+        stream._try_recovery = self._rejoin_later  # type: ignore[attr-defined]
+        return stream
+
+    def _rejoin_later(self, failed: llm.LLM) -> None:
+        status = self._status[self._llm_instances.index(failed)]
+        if status.recovering_task is None or status.recovering_task.done():
+            status.recovering_task = asyncio.create_task(self._rejoin(status))
+
+    @staticmethod
+    async def _rejoin(status: Any) -> None:
+        await asyncio.sleep(RETRY_FAILED_LLM_AFTER)
+        status.available = True
+
+
 def build_llm() -> tuple[llm.LLM, str]:
     """Every configured LLM in order, LLM_PROVIDER's first (Groq by default: the fastest).
 
@@ -118,7 +154,7 @@ def build_llm() -> tuple[llm.LLM, str]:
         return chain[0], label
     # Each attempt's timeout becomes Gemini's request deadline, and Google rejects anything under
     # 10 s ("Minimum allowed deadline is 10s"), which would make every fallback request fail.
-    return llm.FallbackAdapter(chain, attempt_timeout=10.0), label
+    return NoProbeFallbackAdapter(chain, attempt_timeout=10.0), label
 
 
 def select_noise_cancellation(params: NoiseCancellationParams):
@@ -148,8 +184,14 @@ async def identify_call(ctx: JobContext) -> CallInfo:
 
 
 def prewarm(proc: JobProcess) -> None:
-    # Load once per worker process, not once per call.
-    proc.userdata["vad"] = silero.VAD.load()
+    # Load once per worker process, not once per call. End-of-turn detection only starts after
+    # this much silence, so it sets a floor on every reply: Silero's 0.55 s default added ~0.25 s
+    # to each turn. The turn detector decides whether the caller has actually finished.
+    proc.userdata["vad"] = silero.VAD.load(
+        min_silence_duration=float(os.getenv("VAD_MIN_SILENCE_SECONDS", "0.3"))
+    )
+    # Ready before the call rings: building the HTTPS client blocks the event loop for ~0.15 s.
+    proc.userdata["api"] = make_restaurant_api()
 
 
 server = AgentServer(setup_fnc=prewarm)
@@ -163,29 +205,28 @@ async def entrypoint(ctx: JobContext) -> None:
     started_at = datetime.now(UTC)
     ctx.log_context_fields = {"room": ctx.room.name, "call_id": call_id}
 
-    api = make_restaurant_api()
+    # Taken, not shared: the call closes its client when it ends.
+    api = ctx.proc.userdata.pop("api", None) or make_restaurant_api()
     call = await identify_call(ctx)
-    try:
-        restaurant = await api.get_restaurant_by_number(call.dialed)
-    except ApiError as e:
-        logger.error("no restaurant for dialed number %s: %s", call.dialed, e)
-        await api.aclose()
-        return
-    state = CallState(api=api, restaurant=restaurant, call_id=call_id, caller_phone=call.caller_phone)
-    logger.info("call started | %s | %s | %s", call_id, call.channel, restaurant.name)
+    # Fetched while the session sets up the call's audio (about a second, mostly loading noise
+    # cancellation), instead of one after the other.
+    settings = asyncio.create_task(api.get_restaurant_by_number(call.dialed))
 
     session_llm, llm_label = build_llm()
+    stt = deepgram.STT(model="nova-3", language="en-US")
     # Seconds of silence before "Are you still there?", and again before hanging up.
     silence_seconds = float(os.getenv("SILENCE_CHECK_IN_SECONDS", "10"))
+    # Its userdata (the CallState) is set once the restaurant's settings are in.
     session = AgentSession[CallState](
-        userdata=state,
         vad=ctx.proc.userdata["vad"],
-        stt=deepgram.STT(model="nova-3", language="en-US"),
+        stt=stt,
         llm=session_llm,
         tts=deepgram.TTS(model="aura-2-andromeda-en"),
         turn_handling=TurnHandlingOptions(
             # LiveKit's turn model: hosted in dev and on LiveKit Cloud, local "mini" model as fallback.
             turn_detection=inference.TurnDetector(),
+            # Quick by default; longer only while the caller reads out a phone number (turn_taking.py).
+            endpointing=QUICK,
             # Start the LLM, and the voice for its reply, before the turn is confirmed: when the guess
             # holds, the reply is ready the moment the caller stops. At most one guess per turn, as
             # each is another request against the free tier's tokens-per-minute limit.
@@ -194,8 +235,14 @@ async def entrypoint(ctx: JobContext) -> None:
             # "mm-hmm", a cough, background noise or speaker echo don't. A false stop resumes.
             interruption={"min_words": 2, "resume_false_interruption": True},
         ),
-        # Phone numbers are read digit by digit even when the LLM writes "9876543210".
-        tts_text_transforms=["filter_markdown", "filter_emoji", speak_numbers_digit_by_digit],
+        # Plain punctuation for the voice, and phone numbers read digit by digit even when the LLM
+        # writes "9876543210".
+        tts_text_transforms=[
+            "filter_markdown",
+            "filter_emoji",
+            speak_plain_punctuation,
+            speak_numbers_digit_by_digit,
+        ],
         user_away_timeout=silence_seconds,
         max_tool_steps=3,
     )
@@ -206,11 +253,11 @@ async def entrypoint(ctx: JobContext) -> None:
         max_call_seconds=float(os.getenv("MAX_CALL_SECONDS", "300")),
         silence_grace_seconds=silence_seconds,
     )
-    state.end_call = limits.end_after
-
-    receptionist = Receptionist(state)
+    receptionist = Receptionist()  # silent until it has the restaurant's settings
     latency = LatencyTracker(llm_model=llm_label)
     latency.attach(session)
+    TurnTaking(session).attach()
+    state: CallState | None = None
 
     async def on_shutdown() -> None:
         latency.log_summary()
@@ -223,15 +270,16 @@ async def entrypoint(ctx: JobContext) -> None:
                     usage.input_tokens,
                     usage.output_tokens,
                 )
-        log = build_call_log(
-            state,
-            latency,
-            channel=call.channel,
-            dialed_number=call.dialed,
-            started_at=started_at,
-            ended_at=datetime.now(UTC),
-        )
-        await save_call_log(state, log)
+        if state is not None:
+            log = build_call_log(
+                state,
+                latency,
+                channel=call.channel,
+                dialed_number=call.dialed,
+                started_at=started_at,
+                ended_at=datetime.now(UTC),
+            )
+            await save_call_log(state, log)
         await api.aclose()
 
     ctx.add_shutdown_callback(on_shutdown)
@@ -248,8 +296,23 @@ async def entrypoint(ctx: JobContext) -> None:
         ),
     )
 
-    # A quiet front-of-house hum, and keyboard sounds while a tool is working. Room calls only:
-    # console mode logs a warning and skips it.
+    try:
+        restaurant = await settings
+    except ApiError as e:
+        logger.error("no restaurant for dialed number %s: %s", call.dialed, e)
+        await limits.hang_up(NOT_SET_UP, reason="no restaurant for this number")
+        return
+    state = CallState(api=api, restaurant=restaurant, call_id=call_id, caller_phone=call.caller_phone)
+    state.end_call = limits.end_after
+    session.userdata = state
+    logger.info("call started | %s | %s | %s", call_id, call.channel, restaurant.name)
+
+    await receptionist.begin(state)
+    session.say(build_greeting(restaurant))
+    limits.start()
+
+    # A quiet front-of-house hum, and keyboard sounds while a tool is working. Started after the
+    # greeting so it doesn't delay it. Room calls only: console mode logs a warning and skips it.
     background = BackgroundAudioPlayer(
         ambient_sound=AudioConfig(BuiltinAudioClip.CROWDED_ROOM, volume=0.08),
         thinking_sound=[
@@ -259,20 +322,21 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     await background.start(room=ctx.room, agent_session=session)
 
-    limits.start()
-    session.say(build_greeting(restaurant))
-
-    async def load_restaurant_facts() -> None:
-        # Fetched while the greeting plays, so menu and info questions skip the API afterwards.
-        facts = await load_facts(api, restaurant)
+    async def load_restaurant_facts(state: CallState) -> None:
+        # Fetched while the greeting plays, so menu and info questions skip the API afterwards,
+        # and the STT learns the dish and street names it would otherwise mishear.
+        facts = await load_facts(api, state.restaurant)
         if facts:
-            instructions = build_instructions(
-                restaurant, caller_id_known=call.caller_phone is not None, facts=facts
+            await receptionist.use_facts(state, facts)
+            stt.update_options(keyterm=facts.keyterms)
+            logger.info(
+                "restaurant facts in the prompt (%d characters), %d STT keyterms, tools: %s",
+                len(facts.text),
+                len(facts.keyterms),
+                ", ".join(t.id for t in receptionist.tools),
             )
-            await receptionist.update_instructions(instructions)
-            logger.info("restaurant facts in the prompt (%d characters)", len(facts))
 
-    task = asyncio.create_task(load_restaurant_facts())
+    task = asyncio.create_task(load_restaurant_facts(state))
     _background_tasks.add(task)  # the entrypoint returns before it finishes
     task.add_done_callback(_background_tasks.discard)
 

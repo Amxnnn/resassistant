@@ -77,11 +77,22 @@ class CallLimits:
             await self._disconnect(reason)
 
     def end_after(self, speech: SpeechHandle) -> None:
-        """Hang up once `speech` (the agent's goodbye) has finished playing. Used by end_call."""
+        """Hang up once `speech` (the agent's goodbye) has finished playing. Used by end_call.
+
+        If the caller cuts into the goodbye ("oh wait, one more thing"), the call stays open.
+        """
         if self._ending:
             return
         self._ending = True
-        speech.add_done_callback(lambda _: asyncio.create_task(self._disconnect("caller finished")))
+
+        def done(handle: SpeechHandle) -> None:
+            if handle.interrupted:
+                self._ending = False
+                logger.info("goodbye interrupted, staying on the call")
+                return
+            self._timers.append(asyncio.create_task(self._disconnect("caller finished")))
+
+        speech.add_done_callback(done)
 
     async def _disconnect(self, reason: str) -> None:
         logger.info("hanging up: %s", reason)

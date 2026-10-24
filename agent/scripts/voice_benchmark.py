@@ -19,6 +19,7 @@ import os
 import statistics
 import time
 import uuid
+from collections import deque
 from pathlib import Path
 
 import httpx
@@ -62,7 +63,11 @@ def synthesise(text: str, key: str) -> np.ndarray:
 class Caller:
     def __init__(self) -> None:
         self.room = rtc.Room()
-        self.source = rtc.AudioSource(SAMPLE_RATE, 1)
+        # A short queue keeps capture_frame in step with real time, so "finished speaking" is exact.
+        self.source = rtc.AudioSource(SAMPLE_RATE, 1, queue_size_ms=60)
+        self._frames: deque[bytes] = deque()
+        self._spoken = asyncio.Event()
+        self.ended_at = 0.0
         self.speaking = False
         self.agent_loud_at = 0.0  # last time agent audio was above the threshold
         self.first_loud_after: float | None = None
@@ -99,7 +104,7 @@ class Caller:
         await self.room.local_participant.publish_track(
             track, rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE)
         )
-        asyncio.ensure_future(self._silence())
+        asyncio.ensure_future(self._pump())
         print(f"joined {room_name}")
 
     async def _listen(self, track: rtc.Track) -> None:
@@ -111,25 +116,26 @@ class Caller:
                 if self.first_loud_after is None and not self.speaking:
                     self.first_loud_after = now
 
-    async def _silence(self) -> None:
-        """Keep the mic track flowing with silence between lines, like a real phone line."""
+    async def _pump(self) -> None:
+        """The mic's only writer: queued speech when there is some, silence otherwise, like a phone
+        line. (Two tasks capturing frames at once makes LiveKit reject them.)"""
         quiet = np.zeros(SAMPLES, dtype=np.int16).tobytes()
         while True:
-            if not self.speaking:
-                await self.source.capture_frame(rtc.AudioFrame(quiet, SAMPLE_RATE, 1, SAMPLES))
-            await asyncio.sleep(FRAME_MS / 1000)
+            data = self._frames.popleft() if self._frames else quiet
+            await self.source.capture_frame(rtc.AudioFrame(data, SAMPLE_RATE, 1, SAMPLES))
+            if self.speaking and not self._frames:
+                self.speaking = False
+                self.ended_at = time.perf_counter()
+                self._spoken.set()
 
     async def say(self, audio: np.ndarray) -> float:
-        """Speak in real time; returns when the last sample has been sent."""
+        """Speak in real time; returns when the last sample has gone out."""
+        padded = np.pad(audio, (0, -len(audio) % SAMPLES))
+        self._spoken.clear()
+        self._frames.extend(padded[i : i + SAMPLES].tobytes() for i in range(0, len(padded), SAMPLES))
         self.speaking = True
-        for start in range(0, len(audio), SAMPLES):
-            chunk = audio[start : start + SAMPLES]
-            if len(chunk) < SAMPLES:
-                chunk = np.pad(chunk, (0, SAMPLES - len(chunk)))
-            await self.source.capture_frame(rtc.AudioFrame(chunk.tobytes(), SAMPLE_RATE, 1, SAMPLES))
-        await self.source.wait_for_playout()  # capture_frame queues up to a second ahead
-        self.speaking = False
-        return time.perf_counter()
+        await self._spoken.wait()
+        return self.ended_at
 
     async def wait_for_reply(self, timeout: float = 25) -> None:
         """Wait until the agent has started a new reply and then gone quiet."""
