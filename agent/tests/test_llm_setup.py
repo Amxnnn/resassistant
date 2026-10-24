@@ -36,11 +36,13 @@ def test_groq_is_primary_with_gemini_as_fallback_when_both_keys_are_set(monkeypa
     monkeypatch.setenv("GOOGLE_API_KEY", "test")
     session_llm, label = build_llm()
     assert isinstance(session_llm, llm.FallbackAdapter)
-    assert label == "openai/gpt-oss-20b (fallback gemini-3.5-flash-lite)"
+    assert label == "openai/gpt-oss-120b (fallback openai/gpt-oss-20b, gemini-3.5-flash-lite)"
     # Becomes Gemini's request deadline; Google rejects deadlines under 10 s.
     assert session_llm._attempt_timeout >= 10
 
     monkeypatch.delenv("GOOGLE_API_KEY")
+    monkeypatch.setenv("GROQ_MODELS", "openai/gpt-oss-20b")
     session_llm, label = build_llm()
     assert not isinstance(session_llm, llm.FallbackAdapter)
     assert not isinstance(session_llm, google.LLM)
+    assert label == "openai/gpt-oss-20b"

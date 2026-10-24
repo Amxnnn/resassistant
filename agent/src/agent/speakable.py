@@ -5,6 +5,9 @@ from __future__ import annotations
 import re
 from collections.abc import AsyncIterable, AsyncIterator
 from datetime import date, datetime, time, timedelta
+from typing import Any
+
+from livekit.agents import FlushSentinel
 
 
 def speak_time(t: datetime | time) -> str:
@@ -89,3 +92,43 @@ async def speak_numbers_digit_by_digit(chunks: AsyncIterable[str]) -> AsyncItera
             buffer = buffer[cut:]
     if buffer:
         yield space_out_long_numbers(buffer)
+
+
+_PHRASE_END = re.compile(r"[.!?;:,](?=\s|$)")
+
+
+async def speak_in_phrases(
+    chunks: AsyncIterable[Any], *, first_words: int = 3, later_words: int = 8
+) -> AsyncIterator[Any]:
+    """Split an LLM reply into short spoken segments so the voice starts early.
+
+    Without this the TTS gets the whole reply as one segment, and Deepgram only starts on a full
+    sentence. A FlushSentinel after the first phrase (at the first comma or full stop once there are
+    a few words) lets it start speaking right away; after that, segments end at sentence ends.
+    LiveKit synthesises the next segment while the previous one plays, so there are no gaps.
+    """
+    words, first = 0, True
+    async for chunk in chunks:
+        text = chunk if isinstance(chunk, str) else _content(chunk)
+        if not text:
+            yield chunk  # tool calls, usage and other non-text chunks pass through untouched
+            continue
+        start = counted = 0
+        for match in _PHRASE_END.finditer(text):
+            words += len(text[counted : match.end()].split())
+            counted = match.end()
+            if words >= (first_words if first else later_words) and (first or match.group(0) in ".!?"):
+                yield text[start : match.end()]
+                yield FlushSentinel()
+                start, words, first = match.end(), 0, False
+        words += len(text[counted:].split())
+        if text[start:]:
+            yield text[start:]
+
+
+def _content(chunk: Any) -> str | None:
+    """Text of a ChatChunk that carries only text; None for tool calls or usage-only chunks."""
+    delta = getattr(chunk, "delta", None)
+    if delta is None or delta.tool_calls:
+        return None
+    return delta.content

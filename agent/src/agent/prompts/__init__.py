@@ -22,7 +22,12 @@ def _calendar_lines(restaurant: RestaurantSettings) -> str:
     return "\n".join(lines)
 
 
-def build_instructions(restaurant: RestaurantSettings, *, caller_id_known: bool, language: str = "en") -> str:
+NO_FACTS_YET = "Not loaded yet: use get_restaurant_info and search_menu."
+
+
+def build_instructions(
+    restaurant: RestaurantSettings, *, caller_id_known: bool, facts: str | None = None, language: str = "en"
+) -> str:
     template = (_TEMPLATES / f"receptionist_{language}.md").read_text(encoding="utf-8")
     now = restaurant.now
     phone_rule = (
@@ -38,6 +43,7 @@ def build_instructions(restaurant: RestaurantSettings, *, caller_id_known: bool,
         hours=restaurant.hours_summary,
         party_limit=restaurant.phone_party_limit,
         phone_rule=phone_rule,
+        facts=facts or NO_FACTS_YET,
     )
 
 

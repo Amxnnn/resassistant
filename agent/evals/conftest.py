@@ -17,7 +17,9 @@ from livekit.agents import AgentSession, mock_tools
 
 from agent.api_client import SAMPLE_RESTAURANT_PHONE, SampleRestaurantAPI
 from agent.api_client.sample import TZ
+from agent.facts import load_facts
 from agent.main import build_llm, gemini_llm, groq_llm
+from agent.prompts import build_instructions
 from agent.tools import CallState, Receptionist
 
 load_dotenv()
@@ -48,14 +50,20 @@ async def judge():
 
 @pytest.fixture
 async def call():
-    """A started text-only session: the Receptionist with its real tools on sample data."""
+    """A started text-only session: the Receptionist with its real tools and facts on sample data."""
     api = SampleRestaurantAPI(now=lambda: NOW)
     restaurant = await api.get_restaurant_by_number(SAMPLE_RESTAURANT_PHONE)
     state = CallState(api=api, restaurant=restaurant, call_id="eval")
     llm, _label = build_llm()
     async with llm, AgentSession[CallState](llm=llm, userdata=state) as session:
         with mock_tools(Receptionist, {"end_call": lambda: "Call ended."}):
-            await session.start(Receptionist(state))
+            agent = Receptionist(state)
+            await session.start(agent)
+            # As in a real call: the menu and info join the prompt once loaded.
+            facts = await load_facts(api, restaurant)
+            await agent.update_instructions(
+                build_instructions(restaurant, caller_id_known=False, facts=facts)
+            )
             yield SimpleNamespace(session=session, state=state, api=api)
 
 

@@ -8,6 +8,7 @@ Run from agent/:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass
@@ -35,8 +36,9 @@ from livekit.plugins import deepgram, google, groq, noise_cancellation, silero
 from agent.api_client import SAMPLE_RESTAURANT_PHONE, ApiError, make_restaurant_api
 from agent.call_limits import CallLimits
 from agent.call_log import build_call_log, save_call_log
+from agent.facts import load_facts
 from agent.metrics import LatencyTracker
-from agent.prompts import build_greeting
+from agent.prompts import build_greeting, build_instructions
 from agent.speakable import speak_numbers_digit_by_digit
 from agent.tools import CallState, Receptionist, new_call_id
 
@@ -45,17 +47,26 @@ if TYPE_CHECKING:
 
 load_dotenv()
 logger = logging.getLogger("agent")
+_background_tasks: set[asyncio.Task[None]] = set()
 
 # A runaway guard, not a length limit: the prompt keeps replies short. gpt-oss and Gemini count
 # their hidden reasoning against this cap, so a tight cap cuts the spoken answer off mid-sentence.
 MAX_REPLY_TOKENS = 600
 
 
-def groq_llm() -> llm.LLM:
+# Groq's free tier counts its per-minute and per-day token limits per model, so each model in this
+# list is a separate budget. gpt-oss-120b first: as fast as 20b here (~0.4-0.6 s to first token)
+# and better at following the prompt and tools.
+DEFAULT_GROQ_MODELS = "openai/gpt-oss-120b,openai/gpt-oss-20b"
+
+
+def groq_models() -> list[str]:
+    return [m.strip() for m in os.getenv("GROQ_MODELS", DEFAULT_GROQ_MODELS).split(",") if m.strip()]
+
+
+def groq_llm(model: str | None = None) -> llm.LLM:
     # The plugin sets reasoning_effort="low" for gpt-oss models.
-    return groq.LLM(
-        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"), max_completion_tokens=MAX_REPLY_TOKENS
-    )
+    return groq.LLM(model=model or groq_models()[0], max_completion_tokens=MAX_REPLY_TOKENS)
 
 
 class ForeignCallSignatures(dict[str, bytes]):
@@ -89,27 +100,25 @@ def gemini_llm() -> llm.LLM:
 
 
 def build_llm() -> tuple[llm.LLM, str]:
-    """The LLM_PROVIDER model first (Groq by default, the fastest in the week-1 measurements).
+    """Every configured LLM in order, LLM_PROVIDER's first (Groq by default: the fastest).
 
-    When the other provider's key is set too, it becomes an automatic fallback: a rate-limit or
-    outage on the first switches the call to the second instead of dropping it.
+    A rate limit or outage on one model moves the request to the next instead of dropping the turn.
     Returns the LLM and a label for the latency logs.
     """
     provider = os.getenv("LLM_PROVIDER", "groq").lower()
     if provider not in ("groq", "gemini"):
         raise ValueError(f"LLM_PROVIDER must be 'gemini' or 'groq', got {provider!r}")
-    primary, backup, backup_key = (
-        (groq_llm(), gemini_llm, "GOOGLE_API_KEY")
-        if provider == "groq"
-        else (gemini_llm(), groq_llm, "GROQ_API_KEY")
-    )
-    if not os.getenv(backup_key):
-        return primary, primary.model
-    fallback = backup()
+    groqs = [groq_llm(m) for m in groq_models()] if os.getenv("GROQ_API_KEY") else []
+    geminis = [gemini_llm()] if os.getenv("GOOGLE_API_KEY") else []
+    chain = groqs + geminis if provider == "groq" else geminis + groqs
+    if not chain:
+        raise RuntimeError("Set GROQ_API_KEY and/or GOOGLE_API_KEY in agent/.env")
+    label = chain[0].model + (f" (fallback {', '.join(m.model for m in chain[1:])})" if chain[1:] else "")
+    if len(chain) == 1:
+        return chain[0], label
     # Each attempt's timeout becomes Gemini's request deadline, and Google rejects anything under
     # 10 s ("Minimum allowed deadline is 10s"), which would make every fallback request fail.
-    adapter = llm.FallbackAdapter([primary, fallback], attempt_timeout=10.0)
-    return adapter, f"{primary.model} (fallback {fallback.model})"
+    return llm.FallbackAdapter(chain, attempt_timeout=10.0), label
 
 
 def select_noise_cancellation(params: NoiseCancellationParams):
@@ -177,9 +186,10 @@ async def entrypoint(ctx: JobContext) -> None:
         turn_handling=TurnHandlingOptions(
             # LiveKit's turn model: hosted in dev and on LiveKit Cloud, local "mini" model as fallback.
             turn_detection=inference.TurnDetector(),
-            # Start the LLM before the turn ends to save latency, but at most once per turn: each
-            # retry is another request against the free tier's tokens-per-minute limit.
-            preemptive_generation={"max_retries": 1},
+            # Start the LLM, and the voice for its reply, before the turn is confirmed: when the guess
+            # holds, the reply is ready the moment the caller stops. At most one guess per turn, as
+            # each is another request against the free tier's tokens-per-minute limit.
+            preemptive_generation={"max_retries": 1, "preemptive_tts": True},
             # Only real words stop the agent mid-sentence: "no, wait" (2 words) does, while
             # "mm-hmm", a cough, background noise or speaker echo don't. A false stop resumes.
             interruption={"min_words": 2, "resume_false_interruption": True},
@@ -198,6 +208,7 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     state.end_call = limits.end_after
 
+    receptionist = Receptionist(state)
     latency = LatencyTracker(llm_model=llm_label)
     latency.attach(session)
 
@@ -226,10 +237,14 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.add_shutdown_callback(on_shutdown)
 
     await session.start(
-        agent=Receptionist(state),
+        agent=receptionist,
         room=ctx.room,
         room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(noise_cancellation=select_noise_cancellation),
+            audio_input=room_io.AudioInputOptions(
+                noise_cancellation=select_noise_cancellation
+                if os.getenv("NOISE_CANCELLATION", "on").lower() != "off"
+                else None
+            ),
         ),
     )
 
@@ -246,6 +261,20 @@ async def entrypoint(ctx: JobContext) -> None:
 
     limits.start()
     session.say(build_greeting(restaurant))
+
+    async def load_restaurant_facts() -> None:
+        # Fetched while the greeting plays, so menu and info questions skip the API afterwards.
+        facts = await load_facts(api, restaurant)
+        if facts:
+            instructions = build_instructions(
+                restaurant, caller_id_known=call.caller_phone is not None, facts=facts
+            )
+            await receptionist.update_instructions(instructions)
+            logger.info("restaurant facts in the prompt (%d characters)", len(facts))
+
+    task = asyncio.create_task(load_restaurant_facts())
+    _background_tasks.add(task)  # the entrypoint returns before it finishes
+    task.add_done_callback(_background_tasks.discard)
 
 
 if __name__ == "__main__":

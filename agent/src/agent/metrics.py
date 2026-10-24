@@ -83,7 +83,12 @@ class LatencyTracker:
             else:
                 logger.info("agent: %s", turn.text)
             if latency is not None:
-                logger.info(_format_turn(turn.index, latency))
+                # Time from LLM start to the first sentence reaching TTS: how long the voice waited for text.
+                ttfs = _ms(msg.metrics.get("llm_node_ttfs"))
+                logger.info(
+                    _format_turn(turn.index, latency)
+                    + ("" if ttfs is None else f" | first text to tts {ttfs}")
+                )
             return turn
         return None
 

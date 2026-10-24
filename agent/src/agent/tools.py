@@ -17,7 +17,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from livekit.agents import Agent, RunContext, function_tool
+from livekit.agents import Agent, ModelSettings, RunContext, function_tool, llm
 from livekit.agents.voice.speech_handle import SpeechHandle
 
 from agent.api_client import ApiError, RestaurantAPI
@@ -31,7 +31,14 @@ from agent.api_client.models import (
     UpdateReservationRequest,
 )
 from agent.prompts import build_instructions
-from agent.speakable import normalize_phone, speak_day, speak_phone, speak_time, spell_code
+from agent.speakable import (
+    normalize_phone,
+    speak_day,
+    speak_in_phrases,
+    speak_phone,
+    speak_time,
+    spell_code,
+)
 
 Topic = Literal["hours", "location", "parking", "delivery", "specials", "policies"]
 Dietary = Literal["vegetarian", "vegan", "gluten_free", "dairy_free", "nut_free", "jain"]
@@ -190,6 +197,11 @@ class Receptionist(Agent):
             instructions=build_instructions(state.restaurant, caller_id_known=state.caller_phone is not None),
         )
 
+    async def llm_node(self, chat_ctx: llm.ChatContext, tools: list[llm.Tool], model_settings: ModelSettings):
+        """The default LLM step, split into short spoken phrases so the voice starts sooner."""
+        async for chunk in speak_in_phrases(Agent.default.llm_node(self, chat_ctx, tools, model_settings)):
+            yield chunk
+
     def _accept_phone(self, s: CallState, phone_number: str | None) -> str | None:
         """The caller ID if there is one; otherwise the number the caller said, if it's valid."""
         if s.caller_phone:
@@ -200,7 +212,7 @@ class Receptionist(Agent):
 
     @function_tool()
     async def get_restaurant_info(self, context: RunContext[CallState], topic: Topic) -> str:
-        """Hours, location, parking, delivery apps, today's specials or policies."""
+        """If the restaurant facts don't cover it: hours, location, parking, delivery, specials, policies."""
         s = context.userdata
         try:
             return (await s.api.get_info(s.restaurant.id, topic)).summary
@@ -214,7 +226,7 @@ class Receptionist(Agent):
         query: str | None = None,
         dietary: list[Dietary] | None = None,
     ) -> str:
-        """Dishes, prices, spice, dietary tags and allergens. Use for every menu question.
+        """Only for a dish or detail not in the restaurant facts: prices, spice, diet tags, allergens.
 
         Args:
             query: Dish or keyword, e.g. "korma". Empty to browse.

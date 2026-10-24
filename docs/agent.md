@@ -25,7 +25,7 @@ lk cloud auth               # once: links the lk CLI to your LiveKit Cloud proje
 
 `lk agent dev` registers under a random dev deployment so your test traffic stays separate. The turn detector runs on LiveKit Cloud in this mode and falls back to a local model if the cloud one is unreachable.
 
-Switch the LLM without touching code: set `LLM_PROVIDER=groq` (default) or `gemini` in `.env`, and choose models with `GROQ_MODEL` and `GEMINI_MODEL`.
+Switch the LLM without touching code: set `LLM_PROVIDER=groq` (default) or `gemini` in `.env`, and choose models with `GROQ_MODELS` (comma-separated, tried in order) and `GEMINI_MODEL`. `NOISE_CANCELLATION=off` turns off LiveKit's noise cancellation, for troubleshooting.
 
 ## Latency
 
@@ -41,6 +41,27 @@ turn 4 latency | total 742 ms | eou 210 | stt 140 | llm ttft 420 (openai/gpt-oss
 The log also shows each `caller:` and `agent:` line. When the caller cuts in, the agent's line is logged as `agent (INTERRUPTED, stopped after): ...` with only what was actually spoken. Barge-in needs at least two recognised words, so "no, wait" stops the agent but "mm-hmm", a cough or noise doesn't. If an interrupted line is followed by a `caller:` line repeating the agent's own words, the mic is picking up the speakers: use headphones.
 
 When the call ends, a summary line gives p50 and p95 for `total` and the median of each stage. To compare LLMs, make the same few calls with `LLM_PROVIDER=gemini` and then `groq`, and compare the summaries.
+
+[scripts/voice_benchmark.py](../agent/scripts/voice_benchmark.py) measures this over real audio. A scripted caller joins a LiveKit room, speaks five questions (a Deepgram voice, cached), and times the gap to the agent's first sound, while the agent's log gives the per-stage breakdown. Run the agent (and the web app), then `uv run python scripts/voice_benchmark.py`.
+
+### What makes replies fast
+
+- **Speak from the first phrase.** LiveKit hands the whole reply to the TTS as one piece, and Deepgram starts on a full sentence. `Receptionist.llm_node` inserts a flush after the first phrase (first comma or full stop with three or more words) and at each sentence end after that, so the voice starts within ~10 ms of the LLM's first phrase. LiveKit synthesises the next piece while the previous one plays, so there are no gaps. Word-by-word synthesis would sound robotic: TTS needs a few words for natural intonation.
+- **Facts in the prompt instead of RAG.** The whole knowledge base (about 20 dishes and six info topics, ~500 tokens) is fetched once while the greeting plays ([facts.py](../agent/src/agent/facts.py)) and added to the prompt. Menu and info questions then take one LLM request and no API round trip. RAG would add a retrieval step for a corpus this small. Availability and bookings still go through tools, live.
+- **Early voice.** Preemptive generation starts the LLM, and the voice for its reply, before the caller's turn is confirmed.
+- **Two Groq models before Gemini.** Groq counts free limits per model, so `gpt-oss-120b` then `gpt-oss-20b` doubles the free budget; Gemini is the last resort.
+
+Measured with the benchmark on 24 Oct 2026, agent clock (caller stops → agent speaks), web app on Supabase in Tokyo:
+
+| Question | Before | After |
+|---|---|---|
+| Opening hours tomorrow | 3.4–7.6 s | 2.3–2.5 s |
+| Vegan dishes | 10.8 s | 1.3–1.4 s |
+| Parking | 13.5 s | 1.1–1.2 s |
+| Paneer tikka allergens | 14.9 s | 1.8–2.0 s |
+| Table on Tuesday (availability tool) | 22.8 s | 9.4–9.9 s |
+
+"Before" was dominated by the LLM: Groq had hit its free limits, so requests went to Gemini, which was taking 5–17 s. After the change, the slow case is the tool path: a ~1.4 s availability query to the database in Tokyo plus extra LLM requests, which on the free tier can hit Groq's per-minute limit. Callers hear about 1.3 s more than the agent clock because of network transit and audio buffering.
 
 ### Week 1 LLM measurements (24 Oct 2026, free tiers, text-only, same prompt)
 
@@ -154,7 +175,7 @@ The time is mostly the web API making several database queries one after another
 
 ## Free-tier limits
 
-Groq's free tier allows **8,000 tokens per minute** on `gpt-oss-20b`, and every request resends the prompt and the tool list (about 1,800 tokens). That is roughly four requests a minute. What keeps calls inside it:
+Groq's free tier allows **8,000 tokens per minute and 200,000 tokens per day per model**, and every request resends the prompt, facts and tool list (about 2,500 tokens). That is roughly three requests a minute and 80 a day per model, about 10–15 short calls. A day of heavy testing uses it up, and then every request goes to Gemini, which is much slower. For dependable sub-2-second replies, Groq's pay-as-you-go tier lifts these limits (see Groq's pricing page; short calls use a few thousand tokens). What keeps calls inside the free limits:
 - **Fallback:** when both `GROQ_API_KEY` and `GOOGLE_API_KEY` are set, a Groq rate limit hands the request to Gemini immediately instead of failing the turn. Two Gemini quirks are handled in [main.py](../agent/src/agent/main.py): tool calls Groq made get Google's documented stand-in thought signature, and each attempt gets 10 s, because Google rejects request deadlines under 10 s.
 - **Small requests:** a short prompt, an 8-day calendar, terse tool descriptions, short replies (under about 30 words), and at most one speculative (preemptive) LLM request per turn. A 600-token cap is only a runaway guard: reasoning tokens count against it, so a tighter cap cuts spoken answers off mid-sentence.
 - **Calls end on their own** ([call_limits.py](../agent/src/agent/call_limits.py)): after `SILENCE_CHECK_IN_SECONDS` of silence the agent asks "Are you still there?", and hangs up if the caller stays silent; no call runs past `MAX_CALL_SECONDS`. These lines are fixed text and cost no LLM requests.
