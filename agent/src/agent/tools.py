@@ -8,6 +8,7 @@ number is used and anything the LLM passes instead is ignored.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -36,6 +37,16 @@ Dietary = Literal["vegetarian", "vegan", "gluten_free", "dairy_free", "nut_free"
 MessageTopic = Literal["large_party", "event", "catering", "callback", "other"]
 
 NOT_CONFIRMED_YET = "The caller hasn't confirmed yet. Read it back and wait for a clear yes."
+NOT_DONE_YET = "The caller hasn't said goodbye, so don't hang up. Ask if there's anything else."
+
+# A caller winding the call up. end_call is refused unless their last words match this: hanging up
+# on someone mid-conversation is far worse than staying on, and the silence timer in
+# call_limits.py still ends a call that has gone quiet.
+_GOODBYE = re.compile(
+    r"\b(bye|goodbye|good night|see you|thanks|thank you|no thanks|nothing else|that'?s (all|it|everything)"
+    r"|that will be all|i'?m (done|good|all set)|have a (good|nice|great))\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -97,6 +108,13 @@ def _availability_reply(availability: Availability) -> str:
     return f"{availability.summary} (First tell the caller their time is taken, then offer these.)"
 
 
+def _last_caller_words(context: RunContext[CallState]) -> str:
+    for item in reversed(context.session.history.items):
+        if item.type == "message" and item.role == "user":
+            return item.text_content or ""
+    return ""
+
+
 class Receptionist(Agent):
     def __init__(self, state: CallState) -> None:
         super().__init__(
@@ -133,21 +151,33 @@ class Receptionist(Agent):
             query: Dish or keyword, e.g. "korma". Empty to browse.
         """
         s = context.userdata
+        note = ""
         try:
             result = await s.api.search_menu(s.restaurant.id, query=query, dietary=dietary)
+            if not result.items and query and dietary:
+                # "Does the aloo gobi have nuts?" often arrives as query + a nut_free filter. An empty
+                # result would read as "not on the menu", so answer about the dish itself.
+                result = await s.api.search_menu(s.restaurant.id, query=query)
+                if result.items:
+                    tags = " or ".join(d.replace("_", " ") for d in dietary)
+                    note = f"(These aren't tagged {tags}; answer from the allergen details.) "
         except ApiError as e:
             return e.say
         details = []
         for item in result.items:
             tags = ", ".join(t.replace("_", " ") for t in item.dietary_tags) or "no dietary tags"
             if not item.allergens_listed:
-                allergens = "allergens NOT LISTED by the restaurant, so say so and never guess"
+                # "Not listed" gets misheard as "none listed", so spell out what to say.
+                allergens = (
+                    "NO allergen information: say you don't have allergen details for it and suggest "
+                    "checking with staff; never imply it's free of anything"
+                )
             elif item.allergens:
                 allergens = "contains " + ", ".join(item.allergens)
             else:
                 allergens = "no listed allergens"
             details.append(f"{item.name}: {tags}; {allergens}.")
-        return result.summary + ("\nDetails: " + " ".join(details) if details else "")
+        return note + result.summary + ("\nDetails: " + " ".join(details) if details else "")
 
     @function_tool()
     async def check_availability(
@@ -363,7 +393,9 @@ class Receptionist(Agent):
 
     @function_tool()
     async def end_call(self, context: RunContext[CallState]) -> str:
-        """Hang up when the caller is done. Call it before saying goodbye."""
+        """Hang up, only once the caller has said goodbye or that they're done. Call before your goodbye."""
+        if not _GOODBYE.search(_last_caller_words(context)):
+            return NOT_DONE_YET
         if context.userdata.end_call:
             context.userdata.end_call(context.speech_handle)
         return "Now say a short, warm goodbye."

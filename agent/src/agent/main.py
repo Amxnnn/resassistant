@@ -42,9 +42,9 @@ if TYPE_CHECKING:
 load_dotenv()
 logger = logging.getLogger("agent")
 
-# Spoken replies are a sentence or two. The cap stops a runaway answer from eating the free-tier
-# token quota, while leaving room for the short reasoning gpt-oss and Gemini do first.
-MAX_REPLY_TOKENS = 300
+# A runaway guard, not a length limit: the prompt keeps replies short. gpt-oss and Gemini count
+# their hidden reasoning against this cap, so a tight cap cuts the spoken answer off mid-sentence.
+MAX_REPLY_TOKENS = 600
 
 
 def groq_llm() -> llm.LLM:
@@ -102,7 +102,10 @@ def build_llm() -> tuple[llm.LLM, str]:
     if not os.getenv(backup_key):
         return primary, primary.model
     fallback = backup()
-    return llm.FallbackAdapter([primary, fallback]), f"{primary.model} (fallback {fallback.model})"
+    # Each attempt's timeout becomes Gemini's request deadline, and Google rejects anything under
+    # 10 s ("Minimum allowed deadline is 10s"), which would make every fallback request fail.
+    adapter = llm.FallbackAdapter([primary, fallback], attempt_timeout=10.0)
+    return adapter, f"{primary.model} (fallback {fallback.model})"
 
 
 def select_noise_cancellation(params: NoiseCancellationParams):
@@ -162,6 +165,9 @@ async def entrypoint(ctx: JobContext) -> None:
             # Start the LLM before the turn ends to save latency, but at most once per turn: each
             # retry is another request against the free tier's tokens-per-minute limit.
             preemptive_generation={"max_retries": 1},
+            # Only real words stop the agent mid-sentence: "no, wait" (2 words) does, while
+            # "mm-hmm", a cough, background noise or speaker echo don't. A false stop resumes.
+            interruption={"min_words": 2, "resume_false_interruption": True},
         ),
         user_away_timeout=silence_seconds,
         max_tool_steps=3,

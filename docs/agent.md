@@ -38,6 +38,8 @@ turn 4 latency | total 742 ms | eou 210 | stt 140 | llm ttft 420 (openai/gpt-oss
 - `total` is voice-to-voice: from the caller stopping speaking to the agent starting to speak. The target is p50 under 800 ms.
 - `eou` is end-of-turn detection, `stt` the final transcript, `llm ttft` the LLM's first token, `tts ttfb` the first audio.
 
+The log also shows each `caller:` and `agent:` line. When the caller cuts in, the agent's line is logged as `agent (INTERRUPTED, stopped after): ...` with only what was actually spoken. Barge-in needs at least two recognised words, so "no, wait" stops the agent but "mm-hmm", a cough or noise doesn't. If an interrupted line is followed by a `caller:` line repeating the agent's own words, the mic is picking up the speakers: use headphones.
+
 When the call ends, a summary line gives p50 and p95 for `total` and the median of each stage. To compare LLMs, make the same few calls with `LLM_PROVIDER=gemini` and then `groq`, and compare the summaries.
 
 ### Week 1 LLM measurements (24 Oct 2026, free tiers, text-only, same prompt)
@@ -88,8 +90,8 @@ uv run ruff format src/agent/api_client/models.py
 ## Free-tier limits
 
 Groq's free tier allows **8,000 tokens per minute** on `gpt-oss-20b`, and every request resends the prompt and the tool list (about 1,800 tokens). That is roughly four requests a minute. What keeps calls inside it:
-- **Fallback:** when both `GROQ_API_KEY` and `GOOGLE_API_KEY` are set, a Groq rate limit hands the request to Gemini immediately instead of failing the turn. Gemini 3 needs a thought signature on earlier tool calls, so calls Groq made get Google's documented stand-in ([main.py](../agent/src/agent/main.py)).
-- **Small requests:** a short prompt, an 8-day calendar, terse tool descriptions, replies capped at 300 tokens, and at most one speculative (preemptive) LLM request per turn.
+- **Fallback:** when both `GROQ_API_KEY` and `GOOGLE_API_KEY` are set, a Groq rate limit hands the request to Gemini immediately instead of failing the turn. Two Gemini quirks are handled in [main.py](../agent/src/agent/main.py): tool calls Groq made get Google's documented stand-in thought signature, and each attempt gets 10 s, because Google rejects request deadlines under 10 s.
+- **Small requests:** a short prompt, an 8-day calendar, terse tool descriptions, short replies (under about 30 words), and at most one speculative (preemptive) LLM request per turn. A 600-token cap is only a runaway guard: reasoning tokens count against it, so a tighter cap cuts spoken answers off mid-sentence.
 - **Calls end on their own** ([call_limits.py](../agent/src/agent/call_limits.py)): after `SILENCE_CHECK_IN_SECONDS` of silence the agent asks "Are you still there?", and hangs up if the caller stays silent; no call runs past `MAX_CALL_SECONDS`. These lines are fixed text and cost no LLM requests.
 - **Usage log:** at the end of each call, a usage line shows the tokens each model used.
 

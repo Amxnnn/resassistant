@@ -69,11 +69,19 @@ class LatencyTracker:
     def add_message(self, msg: ChatMessage) -> Turn | None:
         if msg.role == "user":
             self._pending_caller = msg
-            return self._record(msg, "caller", latency=None)
+            turn = self._record(msg, "caller", latency=None)
+            logger.info("caller: %s", turn.text)
+            return turn
         if msg.role == "assistant":
             latency = self._pair(self._pending_caller, msg) if self._pending_caller else None
             self._pending_caller = None
             turn = self._record(msg, "agent", latency)
+            # An interrupted turn holds only what was actually spoken before the caller cut in.
+            # If the next "caller" line repeats the agent's own words, the mic is picking up echo.
+            if turn.interrupted:
+                logger.warning("agent (INTERRUPTED, stopped after): %s", turn.text)
+            else:
+                logger.info("agent: %s", turn.text)
             if latency is not None:
                 logger.info(_format_turn(turn.index, latency))
             return turn

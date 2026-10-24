@@ -1,5 +1,5 @@
 from agent.api_client.sample import RESTAURANT_ID
-from agent.tools import NOT_CONFIRMED_YET, Receptionist
+from agent.tools import NOT_CONFIRMED_YET, NOT_DONE_YET, Receptionist
 
 from .conftest import turn
 
@@ -76,7 +76,7 @@ async def test_change_and_cancel_an_existing_booking_by_code(agent, make_state, 
 async def test_menu_details_flag_missing_allergen_data(agent, make_state):
     reply = await agent.search_menu(turn(make_state(), "s1"), query="aloo gobi")
     assert "Aloo Gobi, 320 rupees, mild spicy." in reply
-    assert "allergens NOT LISTED" in reply
+    assert "NO allergen information" in reply
 
 
 async def test_large_party_is_steered_to_a_message(agent, make_state, api):
@@ -93,6 +93,35 @@ async def test_end_call_hands_the_goodbye_speech_to_the_hang_up_logic(agent, mak
     state = make_state()
     ended = []
     state.end_call = ended.append
-    ctx = turn(state, "s9")
+    ctx = with_caller_saying(turn(state, "s9"), "No, that's all. Thanks, bye!")
     assert await agent.end_call(ctx) == "Now say a short, warm goodbye."
     assert ended == [ctx.speech_handle]
+
+
+async def test_end_call_refuses_to_hang_up_on_a_caller_who_is_still_talking(agent, make_state):
+    state = make_state()
+    ended = []
+    state.end_call = ended.append
+    for words in ("What time do you open on Sunday?", "Okay. And is there parking?", "hello"):
+        ctx = with_caller_saying(turn(state, "s9"), words)
+        assert await agent.end_call(ctx) == NOT_DONE_YET
+    assert ended == []
+
+
+def with_caller_saying(ctx, words: str):
+    """Give the stand-in RunContext a session history ending with the caller's words."""
+    from types import SimpleNamespace
+
+    from livekit.agents.llm import ChatContext
+
+    history = ChatContext()
+    history.add_message(role="assistant", content="Anything else I can help with?")
+    history.add_message(role="user", content=words)
+    ctx.session = SimpleNamespace(history=history)
+    return ctx
+
+
+async def test_allergen_question_sent_as_a_diet_filter_still_finds_the_dish(agent, make_state):
+    reply = await agent.search_menu(turn(make_state(), "s1"), query="aloo gobi", dietary=["nut_free"])
+    assert reply.startswith("(These aren't tagged nut free; answer from the allergen details.)")
+    assert "Aloo Gobi" in reply and "NO allergen information" in reply

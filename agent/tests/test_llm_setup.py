@@ -37,6 +37,8 @@ def test_groq_is_primary_with_gemini_as_fallback_when_both_keys_are_set(monkeypa
     session_llm, label = build_llm()
     assert isinstance(session_llm, llm.FallbackAdapter)
     assert label == "openai/gpt-oss-20b (fallback gemini-3.5-flash-lite)"
+    # Becomes Gemini's request deadline; Google rejects deadlines under 10 s.
+    assert session_llm._attempt_timeout >= 10
 
     monkeypatch.delenv("GOOGLE_API_KEY")
     session_llm, label = build_llm()
