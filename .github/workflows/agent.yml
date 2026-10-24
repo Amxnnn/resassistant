@@ -1,0 +1,34 @@
+name: agent
+
+# Runs only when the agent or the contract changes, so web/ changes never touch these checks.
+on:
+  pull_request:
+    paths:
+      - "agent/**"
+      - "contracts/**"
+      - ".github/workflows/agent.yml"
+  push:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - "contracts/**"
+      - ".github/workflows/agent.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: agent
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Placeholder until the agent has code. Lint, type-check and evals are added in week 1.
+      - run: echo "No agent checks yet."

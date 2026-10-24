@@ -1,0 +1,18 @@
+# Normalise line endings so Windows and macOS/Linux checkouts never produce whole-file diffs
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary assets (eval audio, screenshots, demo media)
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.wav  binary
+*.mp3  binary
+*.ogg  binary
+*.mp4  binary
+*.pdf  binary

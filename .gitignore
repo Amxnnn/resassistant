@@ -1,0 +1,26 @@
+# Root ignores shared by the whole repo.
+# Language-specific ignores live in agent/.gitignore and web/.gitignore.
+
+# Secrets: never commit real env files
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Logs and scratch
+*.log
+tmp/

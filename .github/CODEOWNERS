@@ -1,0 +1,19 @@
+# One owner per folder. GitHub requests the owner's review on any change in their paths.
+# The last matching pattern wins, so the shared default comes first.
+# TODO: replace WEB_OWNER with the web owner's GitHub username.
+
+# Shared root files: both of you
+*                               @Amxnnn @WEB_OWNER
+
+# Agent track
+/agent/                         @Amxnnn
+/docs/agent.md                  @Amxnnn
+/.github/workflows/agent.yml    @Amxnnn
+
+# Web track
+/web/                           @WEB_OWNER
+/docs/web.md                    @WEB_OWNER
+/.github/workflows/web.yml      @WEB_OWNER
+
+# The contract: both must approve
+/contracts/                     @Amxnnn @WEB_OWNER
