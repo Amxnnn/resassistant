@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time
+from time import monotonic
 from typing import Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -36,6 +37,11 @@ Topic = Literal["hours", "location", "parking", "delivery", "specials", "policie
 Dietary = Literal["vegetarian", "vegan", "gluten_free", "dairy_free", "nut_free", "jain"]
 MessageTopic = Literal["large_party", "event", "catering", "callback", "other"]
 
+# How long an availability answer the caller just heard can stand in for a fresh check when they
+# go on to book. Safe: creating the booking re-checks the table atomically on the server.
+AVAILABILITY_REUSE_SECONDS = 90
+OUTCOME_FOR = {"book": "booked", "change": "changed", "cancel": "cancelled"}
+
 NOT_CONFIRMED_YET = "The caller hasn't confirmed yet. Read it back and wait for a clear yes."
 NOT_DONE_YET = "The caller hasn't said goodbye, so don't hang up. Ask if there's anything else."
 
@@ -47,6 +53,12 @@ _GOODBYE = re.compile(
     r"|that will be all|i'?m (done|good|all set)|have a (good|nice|great))\b",
     re.IGNORECASE,
 )
+
+
+def new_call_id() -> str:
+    """A fresh id for one conversation. Every booking, message and the call log it creates carry it,
+    so each record traces back to exactly one call, whatever the room or caller."""
+    return f"call_{uuid4().hex}"
 
 
 @dataclass
@@ -68,6 +80,10 @@ class CallState:
     given_phone: str | None = None  # said by the caller: read back before use
     pending: PendingAction | None = None
     end_call: Callable[[SpeechHandle], None] | None = None  # hangs up after that speech
+    outcomes: list[str] = field(default_factory=list)  # what this call achieved, for the call log
+    _availability: dict[tuple[date, str, int], tuple[float, Availability]] = field(
+        default_factory=dict, repr=False
+    )
 
     @property
     def phone(self) -> str | None:
@@ -81,17 +97,26 @@ class CallState:
         # The API's clock, fetched at call start, so "today" matches the calendar in the prompt.
         return self.restaurant.now.astimezone(self.tz).date()
 
+    def remember_availability(
+        self, day: date, hhmm: str, party_size: int, availability: Availability
+    ) -> None:
+        self._availability[(day, hhmm, party_size)] = (monotonic(), availability)
+
+    def recent_availability(self, day: date, hhmm: str, party_size: int) -> Availability | None:
+        checked_at, availability = self._availability.get((day, hhmm, party_size), (0.0, None))
+        return availability if monotonic() - checked_at < AVAILABILITY_REUSE_SECONDS else None
+
+    def outcome(self, *, caller_spoke: bool) -> str:
+        """The call's main result for the call log, most significant first."""
+        for outcome in ("booked", "changed", "cancelled", "message_taken"):
+            if outcome in self.outcomes:
+                return outcome
+        return "answered" if caller_spoke else "hung_up"
+
     def describe(self, res: Reservation) -> str:
         start = res.start.astimezone(self.tz)
         day = speak_day(start.date(), self.today())
         return f"a table for {res.party_size} under {res.guest_name}, {day} at {speak_time(start)}"
-
-
-def _parse_date(value: str) -> date | None:
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
 
 
 def _parse_time(value: str) -> time | None:
@@ -99,6 +124,50 @@ def _parse_time(value: str) -> time | None:
         return time.fromisoformat(value)
     except ValueError:
         return None
+
+
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+ASK_WHICH_DAY = "Ask the caller which day they mean."
+DAY_TOO_FAR = "That date is beyond the next two weeks. Ask for the full date and pass it as YYYY-MM-DD."
+
+
+def resolve_day(s: CallState, said: str) -> date | str:
+    """The date the caller means, looked up in the API's calendar; or a question to ask instead.
+
+    The LLM only passes the caller's words. Turning "this Tuesday" into a date is done here, from the
+    calendar the API sent at call start, because the LLM picks the wrong calendar line too often.
+    """
+    raw = said.strip().lower()
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        pass
+    words = re.sub(r"[^a-z0-9 ]", " ", raw).split()
+    calendar = [d.date for d in s.restaurant.calendar]  # starts today
+    if not words or not calendar:
+        return ASK_WHICH_DAY
+    if "today" in words or "tonight" in words:
+        return calendar[0]
+    if "tomorrow" in words:
+        return calendar[1]
+    for name in _WEEKDAYS:
+        if any(w in (name, name[:3]) for w in words):
+            matches = [d for d in calendar if f"{d:%A}".lower() == name]
+            # "next Saturday" said on a Saturday means a week from today, not today.
+            if "next" in words and matches and matches[0] == calendar[0]:
+                matches = matches[1:]
+            return matches[0] if matches else DAY_TOO_FAR
+    number = next(
+        (int(m.group(1)) for w in words if (m := re.fullmatch(r"(\d{1,2})(st|nd|rd|th)?", w))), None
+    )
+    month = next((i for i, m in enumerate(_MONTHS, 1) for w in words if w.startswith(m)), None)
+    if number:
+        for d in calendar:
+            if d.day == number and (month is None or d.month == month):
+                return d
+        return DAY_TOO_FAR
+    return ASK_WHICH_DAY
 
 
 def _availability_reply(availability: Availability) -> str:
@@ -181,22 +250,25 @@ class Receptionist(Agent):
 
     @function_tool()
     async def check_availability(
-        self, context: RunContext[CallState], date: str, time: str, party_size: int
+        self, context: RunContext[CallState], day: str, time: str, party_size: int
     ) -> str:
         """Check if a table is free.
 
         Args:
-            date: YYYY-MM-DD from the calendar.
+            day: The day as the caller said it: "Tuesday", "tomorrow", "27th", or YYYY-MM-DD.
             time: 24-hour HH:MM.
         """
         s = context.userdata
-        day = _parse_date(date)
-        if day is None or _parse_time(time) is None:
-            return "Use date as YYYY-MM-DD and time as HH:MM."
+        if _parse_time(time) is None:
+            return "Use time as 24-hour HH:MM."
+        if isinstance(found := resolve_day(s, day), str):
+            return found
+        day = found
         try:
             availability = await s.api.check_availability(s.restaurant.id, day, time, party_size)
         except ApiError as e:
             return e.say
+        s.remember_availability(day, time, party_size, availability)
         return _availability_reply(availability)
 
     @function_tool()
@@ -205,7 +277,7 @@ class Receptionist(Agent):
         context: RunContext[CallState],
         guest_name: str,
         party_size: int,
-        date: str,
+        day: str,
         time: str,
         phone_number: str | None = None,
         notes: str | None = None,
@@ -213,20 +285,26 @@ class Receptionist(Agent):
         """Validate a new booking and get the read-back. Books nothing.
 
         Args:
-            date: YYYY-MM-DD from the calendar.
+            day: The day as the caller said it: "Tuesday", "tomorrow", "27th", or YYYY-MM-DD.
             time: 24-hour HH:MM.
             phone_number: Only if there's no caller ID.
             notes: Special requests.
         """
         s = context.userdata
-        day = _parse_date(date)
-        if day is None or _parse_time(time) is None:
-            return "Use date as YYYY-MM-DD and time as HH:MM."
+        if _parse_time(time) is None:
+            return "Use time as 24-hour HH:MM."
+        if isinstance(found := resolve_day(s, day), str):
+            return found
+        day = found
         # Availability first: if the time is taken, the caller should hear that before giving details.
-        try:
-            availability = await s.api.check_availability(s.restaurant.id, day, time, party_size)
-        except ApiError as e:
-            return e.say
+        # Reuse the check the caller just heard instead of a second round trip to the database.
+        availability = s.recent_availability(day, time, party_size)
+        if availability is None:
+            try:
+                availability = await s.api.check_availability(s.restaurant.id, day, time, party_size)
+            except ApiError as e:
+                return e.say
+            s.remember_availability(day, time, party_size, availability)
         if not availability.requested_time_available:
             return _availability_reply(availability)
         phone = self._accept_phone(s, phone_number)
@@ -289,14 +367,14 @@ class Receptionist(Agent):
         self,
         context: RunContext[CallState],
         booking_code: str,
-        new_date: str | None = None,
+        new_day: str | None = None,
         new_time: str | None = None,
         new_party_size: int | None = None,
     ) -> str:
         """Validate a change to a booking and get the read-back. Changes nothing.
 
         Args:
-            new_date: YYYY-MM-DD.
+            new_day: The new day as the caller said it: "Tuesday", "tomorrow", "27th", or YYYY-MM-DD.
             new_time: 24-hour HH:MM.
         """
         s = context.userdata
@@ -304,10 +382,12 @@ class Receptionist(Agent):
         if isinstance(res, str):
             return res
         current = res.start.astimezone(s.tz)
-        day = _parse_date(new_date) if new_date else current.date()
+        day = resolve_day(s, new_day) if new_day else current.date()
+        if isinstance(day, str):
+            return day
         at = _parse_time(new_time) if new_time else current.time()
-        if day is None or at is None:
-            return "Use date as YYYY-MM-DD and time as HH:MM."
+        if at is None:
+            return "Use time as 24-hour HH:MM."
         start = datetime.combine(day, at, s.tz)
         party_size = new_party_size or res.party_size
         request = UpdateReservationRequest(
@@ -355,6 +435,7 @@ class Receptionist(Agent):
             s.pending = None
             return e.say
         s.pending = None
+        s.outcomes.append(OUTCOME_FOR[pending.kind])
         if pending.kind == "cancel":
             return f"Done. {res.summary}"
         return f"Done. {res.summary} Tell the caller the code slowly: {spell_code(res.code)}."
@@ -387,9 +468,11 @@ class Receptionist(Agent):
             call_id=s.call_id,
         )
         try:
-            return (await s.api.create_message(request)).summary
+            receipt = await s.api.create_message(request)
         except ApiError as e:
             return e.say
+        s.outcomes.append("message_taken")
+        return receipt.summary
 
     @function_tool()
     async def end_call(self, context: RunContext[CallState]) -> str:

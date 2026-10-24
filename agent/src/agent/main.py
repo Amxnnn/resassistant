@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Literal
 
 from dotenv import load_dotenv
 from livekit import rtc
@@ -32,9 +34,11 @@ from livekit.plugins import deepgram, google, groq, noise_cancellation, silero
 
 from agent.api_client import SAMPLE_RESTAURANT_PHONE, ApiError, make_restaurant_api
 from agent.call_limits import CallLimits
+from agent.call_log import build_call_log, save_call_log
 from agent.metrics import LatencyTracker
 from agent.prompts import build_greeting
-from agent.tools import CallState, Receptionist
+from agent.speakable import speak_numbers_digit_by_digit
+from agent.tools import CallState, Receptionist, new_call_id
 
 if TYPE_CHECKING:
     from livekit.agents.voice.room_io.types import NoiseCancellationParams
@@ -115,17 +119,23 @@ def select_noise_cancellation(params: NoiseCancellationParams):
     return noise_cancellation.BVC()
 
 
-async def identify_call(ctx: JobContext) -> tuple[str | None, str]:
-    """(caller's number if the phone line gives one, the restaurant number that was dialled)."""
+@dataclass
+class CallInfo:
+    channel: Literal["phone", "browser"]
+    caller_phone: str | None  # from the phone line; None for browser and console calls
+    dialed: str  # the restaurant number the call is for
+
+
+async def identify_call(ctx: JobContext) -> CallInfo:
     default = os.getenv("DEFAULT_RESTAURANT_PHONE", SAMPLE_RESTAURANT_PHONE)
     if ctx.is_fake_job():  # console mode: no room, no caller ID
-        return None, default
+        return CallInfo("browser", None, default)
     participant = await ctx.wait_for_participant()
     attrs = participant.attributes
     if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-        return attrs.get("sip.phoneNumber"), attrs.get("sip.trunkPhoneNumber") or default
+        return CallInfo("phone", attrs.get("sip.phoneNumber"), attrs.get("sip.trunkPhoneNumber") or default)
     # Browser test calls: the web token route sets restaurant_phone (see contracts/openapi.yaml).
-    return None, attrs.get("restaurant_phone") or default
+    return CallInfo("browser", None, attrs.get("restaurant_phone") or default)
 
 
 def prewarm(proc: JobProcess) -> None:
@@ -138,17 +148,22 @@ server = AgentServer(setup_fnc=prewarm)
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext) -> None:
-    ctx.log_context_fields = {"room": ctx.room.name}
+    # One id per conversation, on every log line and on everything the call creates. Room names
+    # aren't enough: console mode reuses one, and a test page can reuse a name it's given.
+    call_id = new_call_id()
+    started_at = datetime.now(UTC)
+    ctx.log_context_fields = {"room": ctx.room.name, "call_id": call_id}
 
     api = make_restaurant_api()
-    caller_phone, dialed = await identify_call(ctx)
+    call = await identify_call(ctx)
     try:
-        restaurant = await api.get_restaurant_by_number(dialed)
+        restaurant = await api.get_restaurant_by_number(call.dialed)
     except ApiError as e:
-        logger.error("no restaurant for dialed number %s: %s", dialed, e)
+        logger.error("no restaurant for dialed number %s: %s", call.dialed, e)
         await api.aclose()
         return
-    state = CallState(api=api, restaurant=restaurant, call_id=ctx.room.name, caller_phone=caller_phone)
+    state = CallState(api=api, restaurant=restaurant, call_id=call_id, caller_phone=call.caller_phone)
+    logger.info("call started | %s | %s | %s", call_id, call.channel, restaurant.name)
 
     session_llm, llm_label = build_llm()
     # Seconds of silence before "Are you still there?", and again before hanging up.
@@ -169,6 +184,8 @@ async def entrypoint(ctx: JobContext) -> None:
             # "mm-hmm", a cough, background noise or speaker echo don't. A false stop resumes.
             interruption={"min_words": 2, "resume_false_interruption": True},
         ),
+        # Phone numbers are read digit by digit even when the LLM writes "9876543210".
+        tts_text_transforms=["filter_markdown", "filter_emoji", speak_numbers_digit_by_digit],
         user_away_timeout=silence_seconds,
         max_tool_steps=3,
     )
@@ -195,6 +212,15 @@ async def entrypoint(ctx: JobContext) -> None:
                     usage.input_tokens,
                     usage.output_tokens,
                 )
+        log = build_call_log(
+            state,
+            latency,
+            channel=call.channel,
+            dialed_number=call.dialed,
+            started_at=started_at,
+            ended_at=datetime.now(UTC),
+        )
+        await save_call_log(state, log)
         await api.aclose()
 
     ctx.add_shutdown_callback(on_shutdown)

@@ -60,6 +60,17 @@ Tools in [tools.py](../agent/src/agent/tools.py):
 - **Bookings, changes and cancellations:** always two steps. A `prepare_*` tool checks the request and returns a read-back. `confirm_action` carries it out, but refuses to run in the same turn as the prepare, so the caller always gets to say yes first.
 - **Phone numbers:** when the phone line gives a caller ID, it's used and anything the LLM passes is ignored. Spoken numbers default to India (+91).
 - **Messages and hanging up:** `take_message` leaves a message for the manager (large parties, events, or a caller who wants a person); `end_call` hangs up after the goodbye.
+- **Days:** the LLM passes the day as the caller said it ("Tuesday", "tomorrow", "27th"), and `resolve_day` looks it up in the calendar the API sent at call start. Left to itself, the LLM sometimes turned "this Tuesday" into Sunday's date.
+- **Phone numbers by voice:** a text transform in front of TTS spaces out any run of 7 or more digits, so numbers are read digit by digit however the LLM wrote them.
+
+### One id per conversation
+
+Every call gets a fresh id (`call_<32 hex>`, from `new_call_id()` in [tools.py](../agent/src/agent/tools.py)) when it starts. It's attached to:
+- every log line, next to the room name
+- every booking and message the call creates
+- the call log saved when the call ends ([call_log.py](../agent/src/agent/call_log.py)), which holds the transcript, outcome (booked, changed, cancelled, message_taken, answered or hung_up), latency per turn and channel
+
+So in the database each booking traces back to exactly one conversation (`reservations.call_id = calls.call_id`). Room names aren't used for this: console mode reuses one, and a test page can reuse a name it's given. Each call also runs in its own session with its own state, so two people calling at once can't see each other's pending booking or phone number; a unit test interleaves two such calls step by step.
 
 The prompt ([receptionist_en.md](../agent/src/agent/prompts/receptionist_en.md)) keeps the agent to restaurant topics and sets the speaking style. In browser calls, a quiet restaurant background and keyboard sounds while a tool works make it feel like a real front desk. Console mode has no background audio.
 
@@ -89,24 +100,31 @@ uv run ruff format src/agent/api_client/models.py
 
 ## Running with the web app
 
-The agent and [web/](web.md) meet only over HTTP. To run both locally with a real Postgres (database mode; the web app's no-database seed mode can't change or cancel bookings and doesn't block double-booking):
+The agent and [web/](web.md) meet only over HTTP. The web app's data lives in Supabase (project region ap-northeast-1, Tokyo).
 
 ```sh
-# 1. Postgres in Docker, once (afterwards: docker start resassistant-pg)
-docker run -d --name resassistant-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=resassistant -p 5433:5432 postgres:17
-
-# 2. web/.env.local: the same AGENT_API_KEY as agent/.env, and
-#    DATABASE_URL=postgres://postgres:postgres@localhost:5433/resassistant
+# web/.env.local: the same AGENT_API_KEY as agent/.env, and DATABASE_URL set to Supabase's
+# *session pooler* (Project → Connect → Session pooler), e.g.
+#   postgresql://postgres.<project-ref>:<password>@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
+# The direct db.<project-ref>.supabase.co host is IPv6-only and fails on most home networks.
+# URL-encode special characters in the password (@ becomes %40).
 cd web
 pnpm install
+pnpm dev                       # http://localhost:3000, also the staff dashboard
+
+# agent/.env: DATA_SOURCE=api and API_BASE_URL=http://localhost:3000, then talk to it
+cd ../agent
+uv run python -m agent.main console
+```
+
+To work offline instead, run Postgres in Docker and point `DATABASE_URL` at it:
+
+```sh
+docker run -d --name resassistant-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=resassistant -p 5433:5432 postgres:17
+# DATABASE_URL=postgres://postgres:postgres@localhost:5433/resassistant, then from web/:
 pnpm drizzle-kit push --force
 docker exec -i resassistant-pg psql -U postgres -d resassistant < db/migrations/0000_reservations_exclusion.sql
 pnpm db:seed && git checkout -- db/seed-data.json   # the seed script rewrites this tracked file
-pnpm dev                                            # http://localhost:3000, also the staff dashboard
-
-# 3. agent/.env: DATA_SOURCE=api and API_BASE_URL=http://localhost:3000, then talk to it
-cd ../agent
-uv run python -m agent.main console
 ```
 
 Bookings, messages and call logs the agent makes show up in the dashboard at http://localhost:3000.
@@ -116,6 +134,23 @@ Bookings, messages and call logs the agent makes show up in the dashboard at htt
 ```sh
 uv run pytest integration -v
 ```
+
+[scripts/add_dummy_data.py](../agent/scripts/add_dummy_data.py) fills the web app with fictional test data through the same API: bookings across the coming week, next Saturday 7 PM full for parties of 3 or more, three manager messages, and call logs linked to their bookings by call id. Everything is marked "Dummy data" with 555-01xx numbers. `--remove` cancels the dummy bookings again.
+
+### Response times with Supabase
+
+Measured on 24 Oct 2026 from Bangalore, web app running locally, database in Tokyo (about 130 ms per round trip):
+
+| API call | Time | When the agent makes it |
+|---|---|---|
+| Restaurant settings | ~0.9 s | once, at call start |
+| Info, menu | ~0.6 s | a general or menu question |
+| Availability | ~1.4 s | checking a table |
+| Create booking | ~3.1 s | after the caller says yes |
+| Change booking | ~2.8 s | after the caller says yes |
+| Cancel | ~1.2 s | after the caller says yes |
+
+The time is mostly the web API making several database queries one after another, each paying the Tokyo round trip. The agent reuses an availability check from the last 90 seconds instead of repeating it when the caller books, and keyboard sounds play while a tool runs. The big wins are on the web side: a Supabase project in ap-south-1 (Mumbai), queries run in parallel or cached, and booking without re-running the full availability search.
 
 ## Free-tier limits
 

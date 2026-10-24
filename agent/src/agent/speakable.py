@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import AsyncIterable, AsyncIterator
 from datetime import date, datetime, time, timedelta
 
 
@@ -51,3 +52,40 @@ def speak_phone(e164: str) -> str:
 def spell_code(code: str) -> str:
     """K7Q2 -> K, 7, Q, 2."""
     return ", ".join(code.upper())
+
+
+_LONG_NUMBER = re.compile(r"\+?\d[\d \-]{5,}\d")
+_PENDING_NUMBER = re.compile(r"\+?[\d \-]*$")
+
+
+def _spaced(match: re.Match[str]) -> str:
+    text = match.group(0)
+    groups = [g for g in re.split(r"[ \-]+", text.lstrip("+")) if g]
+    digits = "".join(groups)
+    if len(digits) < 7:  # prices, times, years: leave alone
+        return text
+    if len(groups) == 1 and len(digits) == 10:  # 9876543210 -> 98765 43210
+        groups = [digits[:5], digits[5:]]
+    return ", ".join(" ".join(g) for g in groups)
+
+
+def space_out_long_numbers(text: str) -> str:
+    """Phone numbers digit by digit, whatever form the LLM wrote them in."""
+    return _LONG_NUMBER.sub(_spaced, text)
+
+
+async def speak_numbers_digit_by_digit(chunks: AsyncIterable[str]) -> AsyncIterator[str]:
+    """TTS text transform: like space_out_long_numbers, for text that arrives in streamed chunks.
+
+    A number split across chunks ("98765" then " 43210") is held back until it's complete.
+    """
+    buffer = ""
+    async for chunk in chunks:
+        buffer += chunk
+        pending = _PENDING_NUMBER.search(buffer)
+        cut = pending.start() if pending and pending.group(0).strip() else len(buffer)
+        if cut:
+            yield space_out_long_numbers(buffer[:cut])
+            buffer = buffer[cut:]
+    if buffer:
+        yield space_out_long_numbers(buffer)

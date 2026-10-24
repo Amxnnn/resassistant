@@ -69,9 +69,7 @@ async def test_books_only_after_read_back_and_a_yes(call, judge):
         user_input="Hi, I'd like a table for four this Tuesday at 7:30 in the evening. "
         "The name is Asha and my number is 98765 43210."
     )
-    first.expect.contains_function_call(
-        name="prepare_booking", arguments={"party_size": 4, "date": "2026-10-27", "time": "19:30"}
-    )
+    first.expect.contains_function_call(name="prepare_booking", arguments={"party_size": 4, "time": "19:30"})
     assert "confirm_action" not in called(first)
     await (await reply(first)).judge(
         judge,
@@ -82,6 +80,7 @@ async def test_books_only_after_read_back_and_a_yes(call, judge):
     assert "confirm_action" in called(second)
     saved = (await call.api.find_reservations(RESTAURANT_ID, phone="+919876543210")).reservations
     assert len(saved) == 1 and saved[0].party_size == 4 and saved[0].guest_name == "Asha"
+    assert f"{saved[0].start:%Y-%m-%d %H:%M}" == "2026-10-27 19:30"  # "this Tuesday", 7:30 PM
     await (await reply(second)).judge(judge, intent="Confirms the booking and gives the booking code.")
 
 
