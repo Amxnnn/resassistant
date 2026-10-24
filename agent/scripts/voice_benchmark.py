@@ -31,7 +31,10 @@ SAMPLE_RATE = 24000
 FRAME_MS = 20
 SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
 SPEECH_RMS = 400  # int16 RMS above this counts as the agent speaking
-REPLY_DONE_SILENCE = 1.6  # seconds of agent silence that end its reply
+# A reply is over once the agent has been back to "listening" this long: a filler, a slow lookup and
+# the answer after it all count as one reply.
+LISTENING_SETTLE = 0.6
+REPLY_DONE_SILENCE = 1.6  # fallback when the agent doesn't publish its state
 CACHE = Path(".cache/voice_benchmark")
 
 LINES = [
@@ -39,6 +42,7 @@ LINES = [
     "Do you have any vegan dishes?",
     "Is there parking near the restaurant?",
     "Can I get a table for two this Tuesday at eight pm?",
+    "It's under Aman.",
     "Does the paneer tikka have nuts in it?",
 ]
 
@@ -71,6 +75,8 @@ class Caller:
         self.speaking = False
         self.agent_loud_at = 0.0  # last time agent audio was above the threshold
         self.first_loud_after: float | None = None
+        self.agent_state: str | None = None  # LiveKit's lk.agent.state: listening, thinking, speaking
+        self.state_since = 0.0
         self.transcripts: list[str] = []
 
     async def join(self) -> None:
@@ -87,6 +93,12 @@ class Caller:
             # The agent's voice, not its background-audio track.
             if track.kind == rtc.TrackKind.KIND_AUDIO and "background" not in publication.name:
                 asyncio.ensure_future(self._listen(track))
+
+        @self.room.on("participant_attributes_changed")
+        def on_attributes(changed: dict[str, str], participant: rtc.Participant):
+            if "lk.agent.state" in changed:
+                self.agent_state = changed["lk.agent.state"]
+                self.state_since = time.perf_counter()
 
         async def read_text(reader: rtc.TextStreamReader, who: str) -> None:
             try:
@@ -138,12 +150,15 @@ class Caller:
         return self.ended_at
 
     async def wait_for_reply(self, timeout: float = 25) -> None:
-        """Wait until the agent has started a new reply and then gone quiet."""
+        """Wait until the agent has started a new reply, said all of it, and is listening again."""
         deadline = time.perf_counter() + timeout
         while time.perf_counter() < deadline:
-            started = self.first_loud_after is not None
-            if started and time.perf_counter() - self.agent_loud_at > REPLY_DONE_SILENCE:
-                return
+            now = time.perf_counter()
+            if self.first_loud_after is not None and now - self.agent_loud_at > 0.3:
+                if self.agent_state == "listening" and now - self.state_since > LISTENING_SETTLE:
+                    return
+                if self.agent_state is None and now - self.agent_loud_at > REPLY_DONE_SILENCE:
+                    return
             await asyncio.sleep(0.05)
 
 
@@ -168,7 +183,7 @@ async def main() -> None:
             f"\ncaller-heard delay over {len(measured)} turns: "
             f"median {statistics.median(measured) * 1000:.0f} ms, worst {max(measured) * 1000:.0f} ms"
         )
-    print("\n".join(caller.transcripts[-2 * len(lines) :]))
+    print("\n".join(caller.transcripts[1:]))  # after the greeting
     await caller.room.disconnect()
 
 

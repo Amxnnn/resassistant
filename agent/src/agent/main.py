@@ -9,6 +9,7 @@ Run from agent/:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 from dataclasses import dataclass
@@ -169,6 +170,7 @@ class CallInfo:
     channel: Literal["phone", "browser"]
     caller_phone: str | None  # from the phone line; None for browser and console calls
     dialed: str  # the restaurant number the call is for
+    identity: str | None = None  # the caller's participant in the room; None in console mode
 
 
 async def identify_call(ctx: JobContext) -> CallInfo:
@@ -178,9 +180,10 @@ async def identify_call(ctx: JobContext) -> CallInfo:
     participant = await ctx.wait_for_participant()
     attrs = participant.attributes
     if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-        return CallInfo("phone", attrs.get("sip.phoneNumber"), attrs.get("sip.trunkPhoneNumber") or default)
+        dialed = attrs.get("sip.trunkPhoneNumber") or default
+        return CallInfo("phone", attrs.get("sip.phoneNumber"), dialed, participant.identity)
     # Browser test calls: the web token route sets restaurant_phone (see contracts/openapi.yaml).
-    return CallInfo("browser", None, attrs.get("restaurant_phone") or default)
+    return CallInfo("browser", None, attrs.get("restaurant_phone") or default, participant.identity)
 
 
 def prewarm(proc: JobProcess) -> None:
@@ -258,8 +261,15 @@ async def entrypoint(ctx: JobContext) -> None:
     latency.attach(session)
     TurnTaking(session).attach()
     state: CallState | None = None
+    closed = False
 
-    async def on_shutdown() -> None:
+    async def close_call() -> None:
+        """Once per call: whichever comes first, the caller leaving or the job shutting down."""
+        nonlocal closed
+        if closed:
+            return
+        closed = True
+        limits.stop()
         latency.log_summary()
         for usage in session.usage.model_usage:
             if getattr(usage, "type", "") == "llm_usage":
@@ -282,7 +292,25 @@ async def entrypoint(ctx: JobContext) -> None:
             await save_call_log(state, log)
         await api.aclose()
 
-    ctx.add_shutdown_callback(on_shutdown)
+    ctx.add_shutdown_callback(close_call)
+    session_closed = asyncio.Event()
+    session.on("close", lambda _ev: session_closed.set())
+
+    async def after_caller_left() -> None:
+        # LiveKit closes the session when the caller hangs up, which once took a full minute; the
+        # call log (and the dashboard) shouldn't wait that long. A normal close takes well under this,
+        # and lets the session record the line the caller hung up on.
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(session_closed.wait(), timeout=3.0)
+        await close_call()
+
+    def on_participant_left(participant: rtc.RemoteParticipant) -> None:
+        if call.identity and participant.identity == call.identity:
+            task = asyncio.create_task(after_caller_left())
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+
+    ctx.room.on("participant_disconnected", on_participant_left)
 
     await session.start(
         agent=receptionist,

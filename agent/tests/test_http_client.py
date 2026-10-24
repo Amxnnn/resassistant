@@ -94,3 +94,31 @@ async def test_business_errors_are_not_retried():
     with pytest.raises(ApiError) as err:
         await client(flaky(error)).get_info(RESTAURANT_ID, "parking")
     assert err.value.code == "slot_taken"
+
+
+async def test_writes_wait_longer_than_reads():
+    """A booking write that times out may still have gone through: give writes more time."""
+    from agent.api_client.client import WRITE_TIMEOUT_SECONDS
+    from agent.api_client.models import CreateMessageRequest
+
+    timeouts = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        timeouts[request.method] = request.extensions["timeout"]["read"]
+        if request.method == "GET":
+            return httpx.Response(200, json=INFO)
+        return httpx.Response(201, json={"id": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e40", "summary": "Saved."})
+
+    api = client(handler)
+    await api.get_info(RESTAURANT_ID, "parking")
+    await api.create_message(
+        CreateMessageRequest(
+            restaurant_id=RESTAURANT_ID,
+            idempotency_key="6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e41",
+            caller_name="Rohan",
+            caller_phone="+919876543210",
+            topic="catering",
+            details="Lunch for 40 on Friday.",
+        )
+    )
+    assert timeouts == {"GET": 4.0, "POST": WRITE_TIMEOUT_SECONDS}

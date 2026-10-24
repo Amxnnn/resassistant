@@ -69,3 +69,33 @@ def test_percentile_uses_nearest_rank():
     assert percentile([], 50) is None
     assert percentile([400, 100, 300, 200], 50) == 200
     assert percentile([400, 100, 300, 200], 95) == 400
+
+
+def llm_request(model: str, *, cancelled: bool = False):
+    from livekit.agents.metrics import LLMMetrics
+    from livekit.agents.metrics.base import Metadata
+
+    return LLMMetrics(
+        label="livekit.plugins.groq.LLM",
+        request_id="r1",
+        timestamp=0.0,
+        duration=0.9,
+        ttft=0.45,
+        cancelled=cancelled,
+        completion_tokens=40,
+        prompt_tokens=2400,
+        prompt_cached_tokens=0,
+        total_tokens=2440,
+        tokens_per_second=44.0,
+        metadata=Metadata(model_name=model, model_provider="test"),
+    )
+
+
+def test_each_turn_records_the_model_that_actually_answered():
+    tracker = LatencyTracker(llm_model="openai/gpt-oss-120b (fallback gemini-3.5-flash-lite)")
+    tracker.add_message(caller("Is there parking?", stopped_speaking_at=1.0))
+    tracker.add_llm_request(llm_request("openai/gpt-oss-120b"))
+    tracker.add_llm_request(llm_request("gemini-3.5-flash-lite"))  # the chain fell back mid-turn
+    tracker.add_llm_request(llm_request("openai/gpt-oss-120b", cancelled=True))  # a discarded guess
+    turn = tracker.add_message(agent("Yes, valet from 6 PM.", started_speaking_at=2.2))
+    assert turn.latency.llm_model == "gemini-3.5-flash-lite"

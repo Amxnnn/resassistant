@@ -47,6 +47,15 @@ class CallLimits:
         self._timers.append(asyncio.create_task(self._end_at_time_limit(), name="call_time_limit"))
         self._session.on("close", lambda _ev: self._cancel_timers())
 
+    def stop(self) -> None:
+        """The call is over: no check-ins or hang-ups from here on.
+
+        Called when the job shuts down too, not only on the session's close event: LiveKit once took a
+        minute to close a session, and the time limit then "hung up" a call that had already ended.
+        """
+        self._ending = True
+        self._cancel_timers()
+
     def _on_user_state(self, ev: UserStateChangedEvent) -> None:
         if ev.new_state == "speaking" and self._silence:
             self._silence.cancel()  # they answered

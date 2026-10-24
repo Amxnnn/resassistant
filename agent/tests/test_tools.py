@@ -57,7 +57,8 @@ async def test_a_name_but_no_number_still_hears_the_time_is_free(agent, make_sta
     ctx = turn(make_state(), "s1")
     await agent.prepare_booking(ctx, 4, "2026-10-27", "19:30", guest_name="Asha")
     assert ctx.session.said == [
-        "Good news, we have a table for 4 on Tuesday at 7:30 PM. What's the best phone number for the booking?"
+        "Good news, we have a table for 4 on Tuesday at 7:30 PM. "
+        "What's the best phone number for the booking?"
     ]
 
 
@@ -101,7 +102,9 @@ async def test_caller_id_wins_over_a_number_the_llm_passes(make_state, api):
     state = make_state(caller_phone="+12025550199")
     agent = Receptionist(state)
     ctx = turn(state, "s1")
-    await agent.prepare_booking(ctx, 2, "2026-10-27", "20:00", guest_name="Ravi", phone_number="+911234567890")
+    await agent.prepare_booking(
+        ctx, 2, "2026-10-27", "20:00", guest_name="Ravi", phone_number="+911234567890"
+    )
     assert "number" not in ctx.session.said[0]
     await agent.confirm_action(turn(state, "s2"))
     assert (await api.find_reservations(RESTAURANT_ID, phone="+12025550199")).reservations

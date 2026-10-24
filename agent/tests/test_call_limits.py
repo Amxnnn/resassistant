@@ -137,3 +137,13 @@ async def test_cutting_into_the_goodbye_keeps_the_call_open():
     second.finish()
     await asyncio.sleep(0)
     assert session.shut_down and job.shutdown_reason == "caller finished"
+
+
+async def test_nothing_fires_once_the_call_is_over():
+    session, job = FakeSession(), FakeJob()
+    limits = CallLimits(session, job, max_call_seconds=0.05, silence_grace_seconds=0.01)
+    limits.start()
+    limits.stop()  # the caller hung up
+    session.emit("user_state_changed", state("away"))
+    await asyncio.sleep(0.1)
+    assert session.said == [] and not job.room_deleted and job.shutdown_reason is None
