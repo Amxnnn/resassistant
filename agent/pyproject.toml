@@ -1,0 +1,35 @@
+[project]
+name = "restaurant-voice-agent"
+version = "0.1.0"
+description = "Real-time AI phone receptionist for restaurants (LiveKit Agents)"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "livekit-agents[deepgram,google,groq,silero]>=1.8.9",
+    "livekit-plugins-noise-cancellation>=0.3.2",
+    "python-dotenv>=1.2.4",
+    "tzdata>=2026.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.8,<1"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "agent"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.2",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
