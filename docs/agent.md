@@ -25,20 +25,30 @@ lk cloud auth               # once: links the lk CLI to your LiveKit Cloud proje
 
 `lk agent dev` registers under a random dev deployment so your test traffic stays separate. The turn detector runs on LiveKit Cloud in this mode and falls back to a local model if the cloud one is unreachable.
 
-Switch the LLM without touching code: set `LLM_PROVIDER=groq` (or `gemini`) in `.env`, and choose models with `GEMINI_MODEL` and `GROQ_MODEL`.
+Switch the LLM without touching code: set `LLM_PROVIDER=groq` (default) or `gemini` in `.env`, and choose models with `GROQ_MODEL` and `GEMINI_MODEL`.
 
 ## Latency
 
 Every agent reply logs one line:
 
 ```
-turn 4 latency | total 742 ms | eou 210 | stt 140 | llm ttft 420 (gemini-3.8-flash) | tts ttfb 95
+turn 4 latency | total 742 ms | eou 210 | stt 140 | llm ttft 420 (openai/gpt-oss-20b) | tts ttfb 95
 ```
 
 - `total` is voice-to-voice: from the caller stopping speaking to the agent starting to speak. The target is p50 under 800 ms.
 - `eou` is end-of-turn detection, `stt` the final transcript, `llm ttft` the LLM's first token, `tts ttfb` the first audio.
 
 When the call ends, a summary line gives p50 and p95 for `total` and the median of each stage. To compare LLMs, make the same few calls with `LLM_PROVIDER=gemini` and then `groq`, and compare the summaries.
+
+### Week 1 LLM measurements (24 Oct 2026, free tiers, text-only, same prompt)
+
+| Model | First token, turns 1 / 2 / 3 |
+|---|---|
+| Groq `openai/gpt-oss-20b` | 429 / 136 / 292 ms |
+| Gemini `gemini-3.5-flash-lite`, thinking minimal | 1190 / 973 / 1107 ms |
+| Gemini `gemini-3.8-flash`, thinking low | 18,257 ms (one turn) |
+
+Groq is the default primary because of this; the brief assumed Gemini. `gemini-3.8-flash` rejects thinking level `minimal`, `gemini-2.5-flash` is closed to new users, and Groq has retired `llama-3.1-8b-instant`. These are small samples from one evening; re-measure by voice before tuning further.
 
 ## Mock API
 

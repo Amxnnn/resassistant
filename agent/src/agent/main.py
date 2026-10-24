@@ -56,16 +56,19 @@ DEV_RESTAURANT = {
 
 
 def build_llm() -> llm.LLM:
-    """Gemini by default; LLM_PROVIDER=groq switches, so the two can be timed side by side."""
-    provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+    """Groq by default: it had the fastest first token in the week-1 measurements (docs/agent.md).
+    LLM_PROVIDER=gemini switches, so the two can still be timed side by side."""
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
     if provider == "groq":
-        return groq.LLM(model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"))
+        # The plugin sets reasoning_effort="low" for gpt-oss models.
+        return groq.LLM(model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"))
     if provider != "gemini":
         raise ValueError(f"LLM_PROVIDER must be 'gemini' or 'groq', got {provider!r}")
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    # Thinking adds hundreds of ms before the first token: turn it off (2.5) or to minimal (3+).
-    thinking = {"thinking_budget": 0} if model.startswith("gemini-2.") else {"thinking_level": "minimal"}
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    # Thinking adds latency before the first token. Gemini 3+ takes a level, and the lowest
+    # accepted level varies by model: 3.5 Flash-Lite takes "minimal", 3.8 Flash needs "low".
+    thinking = {"thinking_level": os.getenv("GEMINI_THINKING_LEVEL", "minimal")}
     return google.LLM(model=model, thinking_config=thinking)
 
 
