@@ -70,7 +70,7 @@ The prompt ([receptionist_en.md](../agent/src/agent/prompts/receptionist_en.md))
 - Next Saturday's dinner from 7 PM is full for parties of 3 or more.
 - Booking code `K7Q2` belongs to Asha Rao, for next Sunday at 1 PM.
 
-`DATA_SOURCE=api` calls the web tool API at `API_BASE_URL` with `AGENT_API_KEY`. Until web/ is deployed, point it at the mock (from the repo root):
+`DATA_SOURCE=api` calls the web tool API at `API_BASE_URL` with `AGENT_API_KEY` (see [Running with the web app](#running-with-the-web-app)). Without the web app, you can also point it at a mock of the contract (from the repo root):
 
 ```sh
 npx @stoplight/prism-cli mock contracts/openapi.yaml    # http://127.0.0.1:4010
@@ -85,6 +85,36 @@ uv run datamodel-codegen --input ../contracts/openapi.yaml --input-file-type ope
   --collapse-root-models --use-schema-description --use-field-description --disable-timestamp \
   --custom-file-header "# Generated from contracts/openapi.yaml by datamodel-codegen. Do not edit; regenerate (see docs/agent.md)."
 uv run ruff format src/agent/api_client/models.py
+```
+
+## Running with the web app
+
+The agent and [web/](web.md) meet only over HTTP. To run both locally with a real Postgres (database mode; the web app's no-database seed mode can't change or cancel bookings and doesn't block double-booking):
+
+```sh
+# 1. Postgres in Docker, once (afterwards: docker start resassistant-pg)
+docker run -d --name resassistant-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=resassistant -p 5433:5432 postgres:17
+
+# 2. web/.env.local: the same AGENT_API_KEY as agent/.env, and
+#    DATABASE_URL=postgres://postgres:postgres@localhost:5433/resassistant
+cd web
+pnpm install
+pnpm drizzle-kit push --force
+docker exec -i resassistant-pg psql -U postgres -d resassistant < db/migrations/0000_reservations_exclusion.sql
+pnpm db:seed && git checkout -- db/seed-data.json   # the seed script rewrites this tracked file
+pnpm dev                                            # http://localhost:3000, also the staff dashboard
+
+# 3. agent/.env: DATA_SOURCE=api and API_BASE_URL=http://localhost:3000, then talk to it
+cd ../agent
+uv run python -m agent.main console
+```
+
+Bookings, messages and call logs the agent makes show up in the dashboard at http://localhost:3000.
+
+[integration/](../agent/integration/) checks every contract endpoint against the running web app through the agent's own HTTP client. It parses each response with the contract models and covers availability rules, double-booking, ownership, idempotency, and a booking's whole life across routes. It writes fictional "Integration Test" bookings and cancels them. Start the web app, then from `agent/`:
+
+```sh
+uv run pytest integration -v
 ```
 
 ## Free-tier limits
