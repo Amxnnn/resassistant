@@ -1,0 +1,1268 @@
+openapi: 3.1.0
+info:
+  title: Restaurant Voice Agent Tool API
+  version: 1.0.0
+  description: |
+    The only interface between `agent/` (the voice agent, the client) and `web/` (the tool API, the server).
+    Change it only through a `contract/<change>` PR that both owners approve. Bump `info.version`,
+    prefer additive changes, and merge before writing code that depends on the change.
+
+    ## Conventions
+
+    - **Auth:** every request sends the shared secret in the `x-agent-key` header.
+    - **Times:** ISO 8601 with the restaurant's UTC offset, e.g. `2026-11-07T19:30:00+05:30`.
+      Query parameters use `date` = `YYYY-MM-DD` and `time` = `HH:MM`, both in the restaurant's local time.
+      The API owns all date maths and validation; the agent never computes availability.
+    - **Speakable text:** every 2xx body has a `summary`, and every error has `error.say`. Both are short,
+      written for the ear, and safe for the agent to speak as-is.
+    - **Errors:** one shape everywhere: `{"error": {"code": "...", "say": "..."}}`. Clients treat an
+      unknown `code` as a generic failure and speak `say`.
+    - **Idempotency:** every POST body carries an `idempotency_key` (UUID v4). Replaying a key returns the
+      original response (same status and body) and never creates a second record.
+    - **Phone numbers:** E.164, e.g. `+14155550123`.
+    - **`call_id`:** an opaque id the agent creates when a call starts. It is sent on reservations and
+      messages made during the call, and on the call log at the end, so the web app can link them.
+    - **Enums:** request enums are closed (the server rejects unknown values). Response fields that look
+      like enums are plain strings with documented values, so a new value never breaks the other side.
+    - **Ownership:** changing or cancelling a booking requires the caller's phone number or the booking
+      code to match. The server enforces this; the prompt alone is never trusted.
+
+    ## Error codes
+
+    | code | HTTP | Meaning |
+    |---|---|---|
+    | `invalid_request` | 400 | Missing or malformed parameters |
+    | `unauthorized` | 401 | Missing or wrong `x-agent-key` |
+    | `not_your_reservation` | 403 | Phone number or code doesn't match the booking |
+    | `not_found` | 404 | Unknown restaurant, reservation or info topic |
+    | `slot_taken` | 409 | The time was booked between the availability check and the booking; `say` offers alternatives |
+    | `already_cancelled` | 409 | The booking is already cancelled |
+    | `party_too_large` | 422 | Party is above the phone party limit; the agent should take a message for the manager |
+    | `closed` | 422 | The restaurant is closed that day (weekly day off or closure) |
+    | `outside_hours` | 422 | The time is outside opening hours or after last seating |
+    | `in_the_past` | 422 | The requested time has already passed |
+    | `too_far_ahead` | 422 | The date is beyond the booking window |
+    | `internal_error` | 500 | Anything unexpected; `say` apologises and offers a message or transfer |
+
+    ## Agreements outside HTTP
+
+    - **SIP calls:** the agent reads the dialed number from the SIP participant attribute `sip.trunkPhoneNumber`
+      and the caller's number from `sip.phoneNumber`.
+    - **Browser test calls:** the web token route (`app/api/livekit-token/`) sets the participant attribute
+      `restaurant_phone` to the restaurant's E.164 number, so the agent uses the same lookup as a phone call.
+
+    All example data is fictional: a made-up restaurant and 555-01xx phone numbers.
+servers:
+  - url: http://127.0.0.1:4010
+    description: Prism mock (npx @stoplight/prism-cli mock contracts/openapi.yaml)
+  - url: http://localhost:3000
+    description: Local Next.js dev server
+security:
+  - agentKey: []
+tags:
+  - name: restaurants
+    description: Restaurant settings, info and menu
+  - name: reservations
+    description: Availability and bookings
+  - name: messages
+    description: Messages for the manager
+  - name: calls
+    description: Call logs
+
+paths:
+  /api/agent/restaurants/by-number/{phone}:
+    get:
+      operationId: getRestaurantByNumber
+      tags: [restaurants]
+      summary: Restaurant settings for a dialed number
+      description: Called once when a call starts. The agent builds its system prompt from this response.
+      parameters:
+        - name: phone
+          in: path
+          required: true
+          description: The dialed number in E.164. The leading `+` may be sent raw or as `%2B`.
+          schema:
+            $ref: "#/components/schemas/PhoneNumber"
+          example: "+14155550123"
+      responses:
+        "200":
+          description: Restaurant settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestaurantSettings"
+              example:
+                id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+                name: The Saffron Table
+                phone_number: "+14155550123"
+                timezone: Asia/Kolkata
+                currency: INR
+                languages: [en]
+                greeting: Thanks for calling The Saffron Table.
+                recording_enabled: true
+                transfer_number: "+14155550199"
+                phone_party_limit: 8
+                seating_minutes: 90
+                address: 12 Residency Road, near the Brigade Road junction.
+                hours_summary: Open Tuesday to Sunday, 12 to 3 PM and 6 to 11 PM. Closed on Mondays.
+                policies:
+                  - We hold tables for 15 minutes past the booking time.
+                  - Parties of more than 8 are booked by the manager.
+                open_now: false
+                now: "2026-10-24T17:05:00+05:30"
+                calendar:
+                  - date: "2026-10-24"
+                    weekday: Saturday
+                    open: true
+                    hours: 12 to 3 PM and 6 to 11 PM
+                    last_seating: "21:30"
+                    note: null
+                  - date: "2026-10-25"
+                    weekday: Sunday
+                    open: true
+                    hours: 12 to 3 PM and 6 to 11 PM
+                    last_seating: "21:30"
+                    note: null
+                  - date: "2026-10-26"
+                    weekday: Monday
+                    open: false
+                    hours: null
+                    last_seating: null
+                    note: Closed on Mondays
+                summary: The Saffron Table is closed right now and opens again at 6 PM today.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/agent/restaurants/{id}/info:
+    get:
+      operationId: getRestaurantInfo
+      tags: [restaurants]
+      summary: Answer a general question
+      description: Hours, location, parking, delivery apps, today's specials or policies, as speakable text.
+      parameters:
+        - $ref: "#/components/parameters/RestaurantIdPath"
+        - name: topic
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [hours, location, parking, delivery, specials, policies]
+          example: parking
+        - $ref: "#/components/parameters/Language"
+      responses:
+        "200":
+          description: The answer for the topic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InfoAnswer"
+              example:
+                topic: parking
+                summary: There's free valet parking at the entrance from 6 PM, and a paid public lot two minutes' walk away on Museum Road.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/agent/restaurants/{id}/menu:
+    get:
+      operationId: searchMenu
+      tags: [restaurants]
+      summary: Search the menu
+      description: |
+        Matching dishes with price, dietary tags and allergens, taken only from the restaurant's own data.
+        `allergens_listed: false` means the restaurant has not entered allergen data for that dish,
+        so the agent must say the allergens are not listed and must never guess.
+      parameters:
+        - $ref: "#/components/parameters/RestaurantIdPath"
+        - name: query
+          in: query
+          required: false
+          description: Free text matched against dish name, category and description.
+          schema:
+            type: string
+            maxLength: 100
+          example: korma
+        - name: dietary
+          in: query
+          required: false
+          description: Only dishes with all of these dietary tags. Repeat the parameter for several tags.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [vegetarian, vegan, gluten_free, dairy_free, nut_free, jain]
+          example: [vegan]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+      responses:
+        "200":
+          description: Matching dishes. An empty list is a valid answer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuSearchResult"
+              example:
+                items:
+                  - id: 0b9a1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d
+                    name: Chana Masala
+                    category: Mains
+                    description: Chickpeas in an onion and tomato gravy.
+                    price: 350
+                    currency: INR
+                    dietary_tags: [vegetarian, vegan, gluten_free]
+                    spice_level: medium
+                    allergens_listed: true
+                    allergens: []
+                    available_today: true
+                  - id: 1c2d3e4f-5a6b-4c7d-9e8f-0a1b2c3d4e5f
+                    name: Aloo Gobi
+                    category: Mains
+                    description: Potato and cauliflower with cumin and turmeric.
+                    price: 320
+                    currency: INR
+                    dietary_tags: [vegetarian, vegan]
+                    spice_level: mild
+                    allergens_listed: false
+                    allergens: []
+                    available_today: true
+                summary: Two vegan mains. Chana Masala, 350 rupees, medium spicy. Aloo Gobi, 320 rupees, mild. Allergens for the Aloo Gobi are not listed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/agent/restaurants/{id}/availability:
+    get:
+      operationId: checkAvailability
+      tags: [reservations]
+      summary: Check table availability
+      description: |
+        Whether the requested time is free for the party, plus up to 3 open times.
+        If the requested time is free it is the first slot; otherwise `slots` holds the closest open
+        times (possibly none). Above the phone party limit this returns `party_too_large`.
+      parameters:
+        - $ref: "#/components/parameters/RestaurantIdPath"
+        - name: date
+          in: query
+          required: true
+          description: Restaurant-local date.
+          schema:
+            type: string
+            format: date
+          example: "2026-11-07"
+        - name: time
+          in: query
+          required: true
+          description: Restaurant-local time, 24-hour.
+          schema:
+            $ref: "#/components/schemas/LocalTime"
+          example: "19:30"
+        - name: party_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+          example: 4
+      responses:
+        "200":
+          description: Availability for the request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Availability"
+              examples:
+                available:
+                  summary: Requested time is free
+                  value:
+                    date: "2026-11-07"
+                    time: "19:30"
+                    party_size: 4
+                    requested_time_available: true
+                    slots:
+                      - start: "2026-11-07T19:30:00+05:30"
+                        label: Saturday, November 7 at 7:30 PM
+                    summary: Saturday at 7:30 PM is available for 4.
+                full:
+                  summary: Requested time is full
+                  value:
+                    date: "2026-11-07"
+                    time: "19:30"
+                    party_size: 4
+                    requested_time_available: false
+                    slots:
+                      - start: "2026-11-07T19:00:00+05:30"
+                        label: Saturday, November 7 at 7 PM
+                      - start: "2026-11-07T20:15:00+05:30"
+                        label: Saturday, November 7 at 8:15 PM
+                      - start: "2026-11-07T20:30:00+05:30"
+                        label: Saturday, November 7 at 8:30 PM
+                    summary: 7:30 is taken. I can do 7 PM, 8:15 or 8:30 for 4.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: The request breaks a booking rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                party_too_large:
+                  value:
+                    error:
+                      code: party_too_large
+                      say: For more than 8 guests the manager arranges the booking. I can take your details and have them call you back.
+                closed:
+                  value:
+                    error:
+                      code: closed
+                      say: We're closed on Mondays. Would Tuesday work instead?
+
+  /api/agent/reservations:
+    post:
+      operationId: createReservation
+      tags: [reservations]
+      summary: Create a booking
+      description: |
+        Called only after the caller has heard the read-back and said yes. The server re-checks capacity,
+        seats the party at the smallest free table that fits, and relies on the database exclusion
+        constraint so two racing calls can never double-book a table.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+            example:
+              restaurant_id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+              idempotency_key: 8d3f2b1a-6c4e-4f9a-b2d1-3e5c7a9b1d2f
+              guest_name: Asha Rao
+              guest_phone: "+12025550147"
+              party_size: 4
+              start: "2026-11-07T19:30:00+05:30"
+              notes: Window table if possible.
+              call_id: call_RM_7xQ2pL9a
+      responses:
+        "201":
+          description: Booking created (or the original response when the idempotency key is replayed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+              example:
+                id: b3e1f0c2-7a4d-4e8b-9c1d-2f3a4b5c6d7e
+                code: K7Q2
+                restaurant_id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+                guest_name: Asha Rao
+                guest_phone: "+12025550147"
+                party_size: 4
+                start: "2026-11-07T19:30:00+05:30"
+                end: "2026-11-07T21:00:00+05:30"
+                status: confirmed
+                notes: Window table if possible.
+                summary: Table for 4, Saturday at 7:30 PM, code K7Q2.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The time was taken after the availability check
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: slot_taken
+                  say: That time was just booked. 8 PM is free.
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+    get:
+      operationId: findReservations
+      tags: [reservations]
+      summary: Find a caller's upcoming bookings
+      description: |
+        Upcoming, confirmed bookings that match the caller's phone number or a booking code.
+        Send at least one of `phone` or `code`; with neither, the server returns `invalid_request`.
+      parameters:
+        - name: restaurant_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+        - name: phone
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/PhoneNumber"
+          example: "+12025550147"
+        - name: code
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/BookingCode"
+          example: K7Q2
+      responses:
+        "200":
+          description: Matching upcoming bookings. An empty list is a valid answer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationList"
+              example:
+                reservations:
+                  - id: b3e1f0c2-7a4d-4e8b-9c1d-2f3a4b5c6d7e
+                    code: K7Q2
+                    restaurant_id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+                    guest_name: Asha Rao
+                    guest_phone: "+12025550147"
+                    party_size: 4
+                    start: "2026-11-07T19:30:00+05:30"
+                    end: "2026-11-07T21:00:00+05:30"
+                    status: confirmed
+                    notes: Window table if possible.
+                    summary: Table for 4, Saturday at 7:30 PM, code K7Q2.
+                summary: You have one booking, a table for 4 on Saturday at 7:30 PM.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/agent/reservations/{id}:
+    patch:
+      operationId: updateReservation
+      tags: [reservations]
+      summary: Change a booking
+      description: |
+        Changes the time, party size or notes after re-checking capacity. Send `guest_phone` or `code`
+        to prove ownership, plus at least one field to change. Repeating the same change is harmless.
+      parameters:
+        - $ref: "#/components/parameters/ReservationIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReservationRequest"
+            example:
+              guest_phone: "+12025550147"
+              code: null
+              start: "2026-11-07T20:00:00+05:30"
+      responses:
+        "200":
+          description: The updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+              example:
+                id: b3e1f0c2-7a4d-4e8b-9c1d-2f3a4b5c6d7e
+                code: K7Q2
+                restaurant_id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+                guest_name: Asha Rao
+                guest_phone: "+12025550147"
+                party_size: 4
+                start: "2026-11-07T20:00:00+05:30"
+                end: "2026-11-07T21:30:00+05:30"
+                status: confirmed
+                notes: Window table if possible.
+                summary: Moved to Saturday at 8 PM, still a table for 4, code K7Q2.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/agent/reservations/{id}/cancel:
+    post:
+      operationId: cancelReservation
+      tags: [reservations]
+      summary: Cancel a booking
+      description: Cancels the booking and frees the table. Send `guest_phone` or `code` to prove ownership.
+      parameters:
+        - $ref: "#/components/parameters/ReservationIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelReservationRequest"
+            example:
+              idempotency_key: 2a4c6e8f-1b3d-4f5a-9c7e-0d2f4a6b8c1e
+              guest_phone: "+12025550147"
+              code: null
+              reason: Plans changed.
+      responses:
+        "200":
+          description: The cancelled booking (or the original response when the idempotency key is replayed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+              example:
+                id: b3e1f0c2-7a4d-4e8b-9c1d-2f3a4b5c6d7e
+                code: K7Q2
+                restaurant_id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+                guest_name: Asha Rao
+                guest_phone: "+12025550147"
+                party_size: 4
+                start: "2026-11-07T19:30:00+05:30"
+                end: "2026-11-07T21:00:00+05:30"
+                status: cancelled
+                notes: Window table if possible.
+                summary: Your table for 4 on Saturday at 7:30 PM is cancelled.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The booking is already cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: already_cancelled
+                  say: That booking was already cancelled.
+
+  /api/agent/messages:
+    post:
+      operationId: createMessage
+      tags: [messages]
+      summary: Leave a message for the manager
+      description: For large parties, events, catering, or when staff can't be reached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageRequest"
+            example:
+              restaurant_id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+              idempotency_key: 5e7a9c1b-3d5f-4a7c-8e1b-2d4f6a8c0e3b
+              caller_name: Rohan Mehta
+              caller_phone: "+12025550163"
+              topic: large_party
+              details: Birthday dinner for 14 on Friday 13 November around 8 PM. Asked about a set menu.
+              call_id: call_RM_7xQ2pL9a
+      responses:
+        "201":
+          description: Message saved (or the original response when the idempotency key is replayed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageReceipt"
+              example:
+                id: 9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f
+                summary: I've passed that to the manager, who will call you back.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/agent/calls:
+    post:
+      operationId: createCallLog
+      tags: [calls]
+      summary: Save the call log
+      description: Sent once when a call ends, with the transcript, outcome and per-turn latency.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCallLogRequest"
+            example:
+              restaurant_id: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+              call_id: call_RM_7xQ2pL9a
+              idempotency_key: 7c9e1a3b-5d7f-4b9a-8c2e-4f6a8b0c2d4e
+              channel: phone
+              caller_number: "+12025550147"
+              dialed_number: "+14155550123"
+              started_at: "2026-10-24T19:02:11+05:30"
+              ended_at: "2026-10-24T19:04:37+05:30"
+              language: en
+              outcome: booked
+              recording_url: null
+              turns:
+                - index: 0
+                  speaker: agent
+                  text: Thanks for calling The Saffron Table. I'm the restaurant's AI assistant. How can I help?
+                  at: "2026-10-24T19:02:12+05:30"
+                  interrupted: false
+                  latency: null
+                - index: 1
+                  speaker: caller
+                  text: Hi, I'd like a table for four on Saturday at seven thirty.
+                  at: "2026-10-24T19:02:18+05:30"
+                  interrupted: false
+                  latency: null
+                - index: 2
+                  speaker: agent
+                  text: Saturday at 7:30 is free for four. Can I take a name for the booking?
+                  at: "2026-10-24T19:02:21+05:30"
+                  interrupted: false
+                  latency:
+                    eou_ms: 210
+                    stt_ms: 140
+                    llm_ttft_ms: 420
+                    tts_ttfb_ms: 95
+                    total_ms: 725
+                    llm_model: gemini-2.5-flash
+      responses:
+        "201":
+          description: Call log saved (or the original response when the idempotency key is replayed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallLogReceipt"
+              example:
+                id: 4d6f8a0c-2e4a-4c6e-9a1c-3e5a7c9e1b3d
+                summary: Call saved.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    agentKey:
+      type: apiKey
+      in: header
+      name: x-agent-key
+      description: Shared secret, `AGENT_API_KEY` in both `agent/.env` and `web/.env.local`.
+
+  parameters:
+    RestaurantIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+    ReservationIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: b3e1f0c2-7a4d-4e8b-9c1d-2f3a4b5c6d7e
+    Language:
+      name: language
+      in: query
+      required: false
+      description: BCP 47 language of the caller. The answer uses the per-language override when one exists.
+      schema:
+        type: string
+        default: en
+      example: en
+
+  responses:
+    BadRequest:
+      description: Missing or malformed parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: invalid_request
+              say: Sorry, I didn't catch that. Could you give me the date and time again?
+    Unauthorized:
+      description: Missing or wrong x-agent-key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: unauthorized
+              say: Sorry, I'm having trouble reaching our booking system. Can I take a message instead?
+    Forbidden:
+      description: The phone number or code doesn't match the booking
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: not_your_reservation
+              say: I can only change bookings made with this phone number or its booking code.
+    NotFound:
+      description: Unknown restaurant, reservation or info topic
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: not_found
+              say: I couldn't find that booking. Do you have the booking code?
+    Conflict:
+      description: The requested time is no longer free
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: slot_taken
+              say: That time was just booked. 8 PM is free.
+    Unprocessable:
+      description: The request breaks a booking rule
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: outside_hours
+              say: Our last seating is at 9:30 PM. Would 9:30 work?
+
+  schemas:
+    PhoneNumber:
+      type: string
+      description: E.164 phone number.
+      pattern: "^\\+[1-9][0-9]{6,14}$"
+      examples: ["+14155550123"]
+
+    BookingCode:
+      type: string
+      description: Short booking code, easy to say aloud.
+      pattern: "^[A-Z0-9]{4,6}$"
+      examples: [K7Q2]
+
+    LocalTime:
+      type: string
+      description: Restaurant-local time, 24-hour HH:MM.
+      pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+      examples: ["19:30"]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, say]
+          properties:
+            code:
+              type: string
+              description: Machine-readable code; see the table in the API description.
+            say:
+              type: string
+              description: A sentence the agent can speak as-is.
+
+    RestaurantSettings:
+      type: object
+      required:
+        - id
+        - name
+        - phone_number
+        - timezone
+        - currency
+        - languages
+        - greeting
+        - recording_enabled
+        - transfer_number
+        - phone_party_limit
+        - seating_minutes
+        - address
+        - hours_summary
+        - policies
+        - open_now
+        - now
+        - calendar
+        - summary
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone_number:
+          $ref: "#/components/schemas/PhoneNumber"
+        timezone:
+          type: string
+          description: IANA timezone.
+          examples: [Asia/Kolkata]
+        currency:
+          type: string
+          description: ISO 4217 code used for menu prices.
+          examples: [INR]
+        languages:
+          type: array
+          description: BCP 47 languages the agent may speak, in order of preference.
+          minItems: 1
+          items:
+            type: string
+        greeting:
+          type: string
+          description: The restaurant's welcome line. The agent adds the AI-assistant disclosure and recording notice itself.
+        recording_enabled:
+          type: boolean
+          description: When true the agent tells the caller the call is recorded.
+        transfer_number:
+          description: Staff number for transfers. Null means transfers are off and the agent takes a message.
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{6,14}$"
+        phone_party_limit:
+          type: integer
+          minimum: 1
+          description: Largest party the agent may book. Above it, the agent takes a message for the manager.
+        seating_minutes:
+          type: integer
+          minimum: 15
+        address:
+          type: string
+          description: Speakable address with a landmark.
+        hours_summary:
+          type: string
+          description: Speakable weekly opening hours.
+        policies:
+          type: array
+          description: Short speakable policy lines.
+          items:
+            type: string
+        open_now:
+          type: boolean
+        now:
+          type: string
+          format: date-time
+          description: Current time in the restaurant's timezone, with offset.
+        calendar:
+          type: array
+          description: The next 14 days starting today, with closures applied. The agent uses it to turn "Saturday" into a date.
+          items:
+            $ref: "#/components/schemas/CalendarDay"
+        summary:
+          type: string
+
+    CalendarDay:
+      type: object
+      required: [date, weekday, open, hours, last_seating, note]
+      properties:
+        date:
+          type: string
+          format: date
+        weekday:
+          type: string
+          description: English weekday name, e.g. Saturday.
+        open:
+          type: boolean
+        hours:
+          type: [string, "null"]
+          description: Speakable hours for that day; null when closed.
+        last_seating:
+          type: [string, "null"]
+          description: Last bookable start time (HH:MM); null when closed.
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        note:
+          type: [string, "null"]
+          description: Closure reason or other note for that day.
+
+    InfoAnswer:
+      type: object
+      required: [topic, summary]
+      properties:
+        topic:
+          type: string
+          description: "The topic asked about: hours, location, parking, delivery, specials or policies."
+        summary:
+          type: string
+          description: The speakable answer.
+
+    MenuItem:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - description
+        - price
+        - currency
+        - dietary_tags
+        - spice_level
+        - allergens_listed
+        - allergens
+        - available_today
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          type: string
+        description:
+          type: [string, "null"]
+        price:
+          type: number
+          minimum: 0
+          description: Price in major currency units, e.g. 350 for ₹350.
+        currency:
+          type: string
+        dietary_tags:
+          type: array
+          description: "Known values: vegetarian, vegan, gluten_free, dairy_free, nut_free, jain."
+          items:
+            type: string
+        spice_level:
+          type: [string, "null"]
+          description: "Known values: none, mild, medium, hot. Null when not set."
+        allergens_listed:
+          type: boolean
+          description: False means the restaurant hasn't entered allergen data for this dish. The agent must say "not listed", never guess.
+        allergens:
+          type: array
+          description: Allergens present, from the restaurant's data. Only meaningful when allergens_listed is true.
+          items:
+            type: string
+        available_today:
+          type: boolean
+
+    MenuSearchResult:
+      type: object
+      required: [items, summary]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+        summary:
+          type: string
+
+    Slot:
+      type: object
+      required: [start, label]
+      properties:
+        start:
+          type: string
+          format: date-time
+        label:
+          type: string
+          description: Speakable form of the time, e.g. "Saturday, November 7 at 7:30 PM".
+
+    Availability:
+      type: object
+      required: [date, time, party_size, requested_time_available, slots, summary]
+      properties:
+        date:
+          type: string
+          format: date
+        time:
+          $ref: "#/components/schemas/LocalTime"
+        party_size:
+          type: integer
+        requested_time_available:
+          type: boolean
+        slots:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/Slot"
+        summary:
+          type: string
+
+    CreateReservationRequest:
+      type: object
+      required: [restaurant_id, idempotency_key, guest_name, guest_phone, party_size, start]
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        idempotency_key:
+          type: string
+          format: uuid
+        guest_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        guest_phone:
+          $ref: "#/components/schemas/PhoneNumber"
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 50
+        start:
+          type: string
+          format: date-time
+        notes:
+          type: [string, "null"]
+          maxLength: 500
+        call_id:
+          type: [string, "null"]
+          maxLength: 100
+
+    Reservation:
+      type: object
+      required: [id, code, restaurant_id, guest_name, guest_phone, party_size, start, end, status, notes, summary]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          $ref: "#/components/schemas/BookingCode"
+        restaurant_id:
+          type: string
+          format: uuid
+        guest_name:
+          type: string
+        guest_phone:
+          $ref: "#/components/schemas/PhoneNumber"
+        party_size:
+          type: integer
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        status:
+          type: string
+          description: "Known values: confirmed, cancelled."
+        notes:
+          type: [string, "null"]
+        summary:
+          type: string
+
+    ReservationList:
+      type: object
+      required: [reservations, summary]
+      properties:
+        reservations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reservation"
+        summary:
+          type: string
+
+    UpdateReservationRequest:
+      type: object
+      description: Send guest_phone or code to prove ownership, plus at least one of start, party_size or notes.
+      properties:
+        guest_phone:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{6,14}$"
+        code:
+          type: [string, "null"]
+          pattern: "^[A-Z0-9]{4,6}$"
+        start:
+          type: string
+          format: date-time
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 50
+        notes:
+          type: [string, "null"]
+          maxLength: 500
+
+    CancelReservationRequest:
+      type: object
+      required: [idempotency_key]
+      description: Send guest_phone or code to prove ownership.
+      properties:
+        idempotency_key:
+          type: string
+          format: uuid
+        guest_phone:
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{6,14}$"
+        code:
+          type: [string, "null"]
+          pattern: "^[A-Z0-9]{4,6}$"
+        reason:
+          type: [string, "null"]
+          maxLength: 500
+
+    CreateMessageRequest:
+      type: object
+      required: [restaurant_id, idempotency_key, caller_name, caller_phone, topic, details]
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        idempotency_key:
+          type: string
+          format: uuid
+        caller_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        caller_phone:
+          $ref: "#/components/schemas/PhoneNumber"
+        topic:
+          type: string
+          enum: [large_party, event, catering, callback, other]
+        details:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        call_id:
+          type: [string, "null"]
+          maxLength: 100
+
+    MessageReceipt:
+      type: object
+      required: [id, summary]
+      properties:
+        id:
+          type: string
+          format: uuid
+        summary:
+          type: string
+
+    CreateCallLogRequest:
+      type: object
+      required:
+        - restaurant_id
+        - call_id
+        - idempotency_key
+        - channel
+        - caller_number
+        - dialed_number
+        - started_at
+        - ended_at
+        - language
+        - outcome
+        - turns
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        call_id:
+          type: string
+          maxLength: 100
+        idempotency_key:
+          type: string
+          format: uuid
+        channel:
+          type: string
+          enum: [phone, browser]
+        caller_number:
+          description: Null for browser test calls or withheld caller ID.
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{6,14}$"
+        dialed_number:
+          description: Null for browser test calls.
+          type: [string, "null"]
+          pattern: "^\\+[1-9][0-9]{6,14}$"
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        language:
+          type: string
+          description: BCP 47 language the call was mostly in.
+        outcome:
+          type: string
+          description: The call's main result, used for booking and transfer rates.
+          enum: [booked, changed, cancelled, answered, message_taken, transferred, hung_up, failed]
+        recording_url:
+          type: [string, "null"]
+          format: uri
+        turns:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallTurn"
+
+    CallTurn:
+      type: object
+      required: [index, speaker, text, at, interrupted, latency]
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        speaker:
+          type: string
+          enum: [caller, agent]
+        text:
+          type: string
+          description: For an interrupted agent turn, only what was actually spoken.
+        at:
+          type: string
+          format: date-time
+        interrupted:
+          type: boolean
+          description: True when the caller talked over this agent turn.
+        latency:
+          description: Agent turns only; null for caller turns and the greeting.
+          oneOf:
+            - $ref: "#/components/schemas/TurnLatency"
+            - type: "null"
+
+    TurnLatency:
+      type: object
+      description: Per-stage timings in milliseconds. A stage is null when it wasn't measured.
+      required: [eou_ms, stt_ms, llm_ttft_ms, tts_ttfb_ms, total_ms, llm_model]
+      properties:
+        eou_ms:
+          type: [integer, "null"]
+          description: End of caller speech to end-of-turn decision.
+        stt_ms:
+          type: [integer, "null"]
+          description: End of caller speech to final transcript.
+        llm_ttft_ms:
+          type: [integer, "null"]
+          description: LLM time to first token.
+        tts_ttfb_ms:
+          type: [integer, "null"]
+          description: TTS time to first audio byte.
+        total_ms:
+          type: [integer, "null"]
+          description: Voice-to-voice, approximately eou_ms + llm_ttft_ms + tts_ttfb_ms.
+        llm_model:
+          type: [string, "null"]
+
+    CallLogReceipt:
+      type: object
+      required: [id, summary]
+      properties:
+        id:
+          type: string
+          format: uuid
+        summary:
+          type: string

@@ -1,0 +1,142 @@
+# Sample requests for every endpoint in contracts/openapi.yaml.
+# Run them with the VS Code "REST Client" extension (humao.rest-client).
+# Response examples live inline in openapi.yaml.
+#
+# Against the mock:   npx @stoplight/prism-cli mock contracts/openapi.yaml
+# Against Next.js:    change @baseUrl to http://localhost:3000 and @agentKey to your AGENT_API_KEY
+
+@baseUrl = http://127.0.0.1:4010
+@agentKey = dev-agent-key
+@restaurantId = 6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f
+@reservationId = b3e1f0c2-7a4d-4e8b-9c1d-2f3a4b5c6d7e
+
+### Restaurant settings for the dialed number (call starts)
+GET {{baseUrl}}/api/agent/restaurants/by-number/+14155550123
+x-agent-key: {{agentKey}}
+
+### General question
+GET {{baseUrl}}/api/agent/restaurants/{{restaurantId}}/info?topic=parking
+x-agent-key: {{agentKey}}
+
+### Menu search: vegan dishes
+GET {{baseUrl}}/api/agent/restaurants/{{restaurantId}}/menu?dietary=vegan&limit=5
+x-agent-key: {{agentKey}}
+
+### Menu search: free text
+GET {{baseUrl}}/api/agent/restaurants/{{restaurantId}}/menu?query=korma
+x-agent-key: {{agentKey}}
+
+### Availability
+GET {{baseUrl}}/api/agent/restaurants/{{restaurantId}}/availability?date=2026-11-07&time=19:30&party_size=4
+x-agent-key: {{agentKey}}
+
+### Create a booking (after the caller confirms the read-back)
+POST {{baseUrl}}/api/agent/reservations
+x-agent-key: {{agentKey}}
+Content-Type: application/json
+
+{
+  "restaurant_id": "{{restaurantId}}",
+  "idempotency_key": "{{$guid}}",
+  "guest_name": "Asha Rao",
+  "guest_phone": "+12025550147",
+  "party_size": 4,
+  "start": "2026-11-07T19:30:00+05:30",
+  "notes": "Window table if possible.",
+  "call_id": "call_RM_7xQ2pL9a"
+}
+
+### Find a caller's upcoming bookings
+GET {{baseUrl}}/api/agent/reservations?restaurant_id={{restaurantId}}&phone=%2B12025550147
+x-agent-key: {{agentKey}}
+
+### Change a booking
+PATCH {{baseUrl}}/api/agent/reservations/{{reservationId}}
+x-agent-key: {{agentKey}}
+Content-Type: application/json
+
+{
+  "guest_phone": "+12025550147",
+  "start": "2026-11-07T20:00:00+05:30"
+}
+
+### Cancel a booking
+POST {{baseUrl}}/api/agent/reservations/{{reservationId}}/cancel
+x-agent-key: {{agentKey}}
+Content-Type: application/json
+
+{
+  "idempotency_key": "{{$guid}}",
+  "guest_phone": "+12025550147",
+  "reason": "Plans changed."
+}
+
+### Leave a message for the manager
+POST {{baseUrl}}/api/agent/messages
+x-agent-key: {{agentKey}}
+Content-Type: application/json
+
+{
+  "restaurant_id": "{{restaurantId}}",
+  "idempotency_key": "{{$guid}}",
+  "caller_name": "Rohan Mehta",
+  "caller_phone": "+12025550163",
+  "topic": "large_party",
+  "details": "Birthday dinner for 14 on Friday 13 November around 8 PM. Asked about a set menu.",
+  "call_id": "call_RM_7xQ2pL9a"
+}
+
+### Save the call log (call ends)
+POST {{baseUrl}}/api/agent/calls
+x-agent-key: {{agentKey}}
+Content-Type: application/json
+
+{
+  "restaurant_id": "{{restaurantId}}",
+  "call_id": "call_RM_7xQ2pL9a",
+  "idempotency_key": "{{$guid}}",
+  "channel": "phone",
+  "caller_number": "+12025550147",
+  "dialed_number": "+14155550123",
+  "started_at": "2026-10-24T19:02:11+05:30",
+  "ended_at": "2026-10-24T19:04:37+05:30",
+  "language": "en",
+  "outcome": "booked",
+  "recording_url": null,
+  "turns": [
+    {
+      "index": 0,
+      "speaker": "agent",
+      "text": "Thanks for calling The Saffron Table. I'm the restaurant's AI assistant. How can I help?",
+      "at": "2026-10-24T19:02:12+05:30",
+      "interrupted": false,
+      "latency": null
+    },
+    {
+      "index": 1,
+      "speaker": "caller",
+      "text": "Hi, I'd like a table for four on Saturday at seven thirty.",
+      "at": "2026-10-24T19:02:18+05:30",
+      "interrupted": false,
+      "latency": null
+    },
+    {
+      "index": 2,
+      "speaker": "agent",
+      "text": "Saturday at 7:30 is free for four. Can I take a name for the booking?",
+      "at": "2026-10-24T19:02:21+05:30",
+      "interrupted": false,
+      "latency": {
+        "eou_ms": 210,
+        "stt_ms": 140,
+        "llm_ttft_ms": 420,
+        "tts_ttfb_ms": 95,
+        "total_ms": 725,
+        "llm_model": "gemini-2.5-flash"
+      }
+    }
+  ]
+}
+
+### Missing key: should return 401
+GET {{baseUrl}}/api/agent/restaurants/by-number/+14155550123
