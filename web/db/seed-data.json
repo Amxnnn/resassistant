@@ -1,0 +1,648 @@
+{
+  "restaurant": {
+    "id": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f",
+    "name": "The Saffron Table",
+    "phoneNumber": "+14155550123",
+    "timezone": "Asia/Kolkata",
+    "currency": "INR",
+    "languages": [
+      "en",
+      "hi"
+    ],
+    "greeting": "Thanks for calling The Saffron Table.",
+    "recordingEnabled": true,
+    "transferNumber": "+14155550199",
+    "phonePartyLimit": 8,
+    "seatingMinutes": 90,
+    "address": "12 Residency Road, near the Brigade Road junction, Bengaluru.",
+    "hoursSummary": "Open Tuesday to Sunday, 12 to 3 PM and 6 to 11 PM. Closed on Mondays.",
+    "policies": [
+      "We hold tables for 15 minutes past the booking time.",
+      "Parties of more than 8 are booked by the manager.",
+      "For severe food allergies, please confirm with staff on arrival."
+    ]
+  },
+  "opening_hours": [
+    {
+      "weekday": 0,
+      "open": true,
+      "openTime": "12:00:00",
+      "closeTime": "23:00:00",
+      "lastSeating": "21:30"
+    },
+    {
+      "weekday": 1,
+      "open": false,
+      "openTime": null,
+      "closeTime": null,
+      "lastSeating": null
+    },
+    {
+      "weekday": 2,
+      "open": true,
+      "openTime": "12:00:00",
+      "closeTime": "23:00:00",
+      "lastSeating": "21:30"
+    },
+    {
+      "weekday": 3,
+      "open": true,
+      "openTime": "12:00:00",
+      "closeTime": "23:00:00",
+      "lastSeating": "21:30"
+    },
+    {
+      "weekday": 4,
+      "open": true,
+      "openTime": "12:00:00",
+      "closeTime": "23:00:00",
+      "lastSeating": "21:30"
+    },
+    {
+      "weekday": 5,
+      "open": true,
+      "openTime": "12:00:00",
+      "closeTime": "23:00:00",
+      "lastSeating": "21:30"
+    },
+    {
+      "weekday": 6,
+      "open": true,
+      "openTime": "12:00:00",
+      "closeTime": "23:00:00",
+      "lastSeating": "21:30"
+    }
+  ],
+  "closures": [
+    {
+      "id": "3c1a5d7e-9f0b-4a2c-8e4d-6b8a0c2e4f6a",
+      "restaurantId": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f",
+      "date": "2026-11-10",
+      "reason": "Private Deepavali celebration for staff"
+    }
+  ],
+  "tables": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "label": "T1",
+      "capacity": 2
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "label": "T2",
+      "capacity": 2
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000003",
+      "label": "T3",
+      "capacity": 4
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "label": "T4",
+      "capacity": 4
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000005",
+      "label": "T5",
+      "capacity": 6
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000006",
+      "label": "T6",
+      "capacity": 8
+    }
+  ],
+  "menu": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "Paneer Tikka",
+      "category": "Starters",
+      "description": "Chargrilled cottage cheese marinated in spiced yogurt and kasuri methi.",
+      "price": 360,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "medium",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "name": "Tandoori Malai Broccoli",
+      "category": "Starters",
+      "description": "Broccoli florets steeped in cream cheese, cardamom and toasted almonds.",
+      "price": 340,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "mild",
+      "allergensListed": true,
+      "allergens": [
+        "dairy",
+        "nuts"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "name": "Tandoori Chicken Tikka",
+      "category": "Starters",
+      "description": "Tender boneless chicken roasted with smoked Kashmiri chili and lemon.",
+      "price": 440,
+      "dietaryTags": [
+        "gluten_free"
+      ],
+      "spiceLevel": "medium",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "name": "Amritsari Fish Crisps",
+      "category": "Starters",
+      "description": "Carom-seed and gram flour battered sea bass, served with mint chutney.",
+      "price": 490,
+      "dietaryTags": [
+        "gluten_free",
+        "dairy_free"
+      ],
+      "spiceLevel": "medium",
+      "allergensListed": true,
+      "allergens": [
+        "fish"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "name": "Chana Masala",
+      "category": "Mains",
+      "description": "Slow-simmered chickpeas in an onion, roasted cumin, and tomato gravy.",
+      "price": 350,
+      "dietaryTags": [
+        "vegetarian",
+        "vegan",
+        "gluten_free",
+        "dairy_free"
+      ],
+      "spiceLevel": "medium",
+      "allergensListed": true,
+      "allergens": [],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000006",
+      "name": "Aloo Gobi",
+      "category": "Mains",
+      "description": "Potato and cauliflower toss-fried with ginger, turmeric, and fresh coriander.",
+      "price": 320,
+      "dietaryTags": [
+        "vegetarian",
+        "vegan",
+        "gluten_free",
+        "dairy_free"
+      ],
+      "spiceLevel": "mild",
+      "allergensListed": true,
+      "allergens": [],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000007",
+      "name": "Dal Makhani",
+      "category": "Mains",
+      "description": "Black lentils simmered overnight on slow charcoal with churned butter and cream.",
+      "price": 390,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "mild",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000008",
+      "name": "Palak Paneer",
+      "category": "Mains",
+      "description": "Farm paneer cubes in velvety pureed spinach with roasted garlic and fenugreek.",
+      "price": 410,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "mild",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000009",
+      "name": "Butter Chicken",
+      "category": "Mains",
+      "description": "Old Delhi style tandoori chicken simmered in creamy satin tomato gravy with honey.",
+      "price": 520,
+      "dietaryTags": [
+        "gluten_free"
+      ],
+      "spiceLevel": "mild",
+      "allergensListed": true,
+      "allergens": [
+        "dairy",
+        "nuts"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000010",
+      "name": "Chicken Korma",
+      "category": "Mains",
+      "description": "Royal Awadhi chicken simmered gently with brown onion and rich cashew paste.",
+      "price": 510,
+      "dietaryTags": [
+        "gluten_free"
+      ],
+      "spiceLevel": "mild",
+      "allergensListed": true,
+      "allergens": [
+        "dairy",
+        "nuts"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000011",
+      "name": "Lamb Rogan Josh",
+      "category": "Mains",
+      "description": "Slow-braised lamb shanks with Kashmiri chili, rattan jot, and whole spices.",
+      "price": 580,
+      "dietaryTags": [
+        "gluten_free",
+        "dairy_free"
+      ],
+      "spiceLevel": "hot",
+      "allergensListed": true,
+      "allergens": [],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000012",
+      "name": "Vegetable Dum Biryani",
+      "category": "Mains",
+      "description": "Fragrant basmati rice layered with garden vegetables, saffron and fried mint.",
+      "price": 420,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "medium",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000013",
+      "name": "Dum Gosht Biryani",
+      "category": "Mains",
+      "description": "Long-grain basmati sealed in a handi with tender spiced mutton cuts and saffron.",
+      "price": 560,
+      "dietaryTags": [
+        "gluten_free"
+      ],
+      "spiceLevel": "medium",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000014",
+      "name": "Garlic Naan",
+      "category": "Breads",
+      "description": "Clay oven baked flatbread brushed with garlic butter and fresh coriander.",
+      "price": 110,
+      "dietaryTags": [
+        "vegetarian"
+      ],
+      "spiceLevel": "none",
+      "allergensListed": true,
+      "allergens": [
+        "gluten",
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000015",
+      "name": "Tandoori Roti",
+      "category": "Breads",
+      "description": "Whole-wheat flatbread cooked crisp against the tandoor clay wall.",
+      "price": 70,
+      "dietaryTags": [
+        "vegetarian",
+        "vegan",
+        "dairy_free"
+      ],
+      "spiceLevel": "none",
+      "allergensListed": true,
+      "allergens": [
+        "gluten"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000016",
+      "name": "Peshawari Naan",
+      "category": "Breads",
+      "description": "Tandoor bread stuffed with crushed almonds, raisins, coconut and cardamom.",
+      "price": 160,
+      "dietaryTags": [
+        "vegetarian"
+      ],
+      "spiceLevel": "none",
+      "allergensListed": true,
+      "allergens": [
+        "gluten",
+        "dairy",
+        "nuts"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000017",
+      "name": "Gulab Jamun",
+      "category": "Desserts & Drinks",
+      "description": "Warm golden milk dumplings soaked in green cardamom and rosewater syrup.",
+      "price": 180,
+      "dietaryTags": [
+        "vegetarian"
+      ],
+      "spiceLevel": "none",
+      "allergensListed": true,
+      "allergens": [
+        "dairy",
+        "gluten",
+        "nuts"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000018",
+      "name": "Kesar Phirni",
+      "category": "Desserts & Drinks",
+      "description": "Chilled ground rice pudding infused with saffron strands and slivered pistachios.",
+      "price": 210,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "none",
+      "allergensListed": true,
+      "allergens": [
+        "dairy",
+        "nuts"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000019",
+      "name": "Mango Lassi",
+      "category": "Desserts & Drinks",
+      "description": "Sweet churned curd blended with Alphonso mango pulp and saffron.",
+      "price": 160,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "none",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000020",
+      "name": "Masala Chai",
+      "category": "Desserts & Drinks",
+      "description": "Assam CTC tea leaves brewed with ginger, crushed green cardamom and milk.",
+      "price": 90,
+      "dietaryTags": [
+        "vegetarian",
+        "gluten_free"
+      ],
+      "spiceLevel": "none",
+      "allergensListed": true,
+      "allergens": [
+        "dairy"
+      ],
+      "availableToday": true
+    }
+  ],
+  "info_entries": [
+    {
+      "topic": "hours",
+      "language": "en",
+      "answer": "Open Tuesday to Sunday, 12 to 3 PM for lunch and 6 to 11 PM for dinner. We are closed on Mondays."
+    },
+    {
+      "topic": "hours",
+      "language": "hi",
+      "answer": "हम मंगलवार से रविवार दोपहर 12 से 3 बजे और शाम 6 से 11 बजे तक खुले हैं। सोमवार को बंद रहते हैं।"
+    },
+    {
+      "topic": "location",
+      "language": "en",
+      "answer": "12 Residency Road, right near the Brigade Road junction in central Bengaluru."
+    },
+    {
+      "topic": "location",
+      "language": "hi",
+      "answer": "12 रेजीडेंसी रोड, ब्रिगेड रोड जंक्शन के पास, बेंगलुरु।"
+    },
+    {
+      "topic": "parking",
+      "language": "en",
+      "answer": "There is complimentary valet parking right at our main entrance from 6 PM onwards, and a multi-level public parking lot 2 minutes away on Museum Road."
+    },
+    {
+      "topic": "parking",
+      "language": "hi",
+      "answer": "शाम 6 बजे से हमारे मुख्य प्रवेश द्वार पर मानार्थ वैले पार्किंग उपलब्ध है।"
+    },
+    {
+      "topic": "delivery",
+      "language": "en",
+      "answer": "We deliver across central Bengaluru on Swiggy and Zomato during our regular kitchen hours."
+    },
+    {
+      "topic": "delivery",
+      "language": "hi",
+      "answer": "हम स्विगी और जोमैटो पर हमारे किचन समय के दौरान डिलीवरी करते हैं।"
+    },
+    {
+      "topic": "specials",
+      "language": "en",
+      "answer": "Today's chef special is our seasonal Lucknowi Awadhi Thali with smoked Dal Makhani and Dum Biryani."
+    },
+    {
+      "topic": "specials",
+      "language": "hi",
+      "answer": "आज का स्पेशल शेफ लखनवी अवधी थाली है।"
+    },
+    {
+      "topic": "policies",
+      "language": "en",
+      "answer": "We hold tables for 15 minutes past the booking time. Parties of more than 8 guests are booked directly with the manager."
+    },
+    {
+      "topic": "policies",
+      "language": "hi",
+      "answer": "हम बुकिंग समय के 15 मिनट बाद तक टेबल रोकते हैं। 8 से अधिक मेहमानों की बुकिंग मैनेजर द्वारा की जाती है।"
+    }
+  ],
+  "reservations": [
+    {
+      "id": "b3e1f0c2-7a4d-4e8b-9c1d-2f3a4b5c6d7e",
+      "restaurantId": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f",
+      "tableId": "00000000-0000-4000-8000-000000000003",
+      "guestName": "Asha Rao",
+      "guestPhone": "+12025550147",
+      "partySize": 4,
+      "start": "2026-10-24T16:04:54.528Z",
+      "end": "2026-10-24T17:34:54.528Z",
+      "status": "confirmed",
+      "code": "K7Q2",
+      "notes": "Window table if possible.",
+      "source": "phone",
+      "callId": "call_RM_7xQ2pL9a",
+      "idempotencyKey": "8d3f2b1a-6c4e-4f9a-b2d1-3e5c7a9b1d2f"
+    },
+    {
+      "id": "c4f2e1d3-8b5e-4f9c-0d2e-3a4b5c6d7e8f",
+      "restaurantId": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f",
+      "tableId": "00000000-0000-4000-8000-000000000001",
+      "guestName": "Vikram Sen",
+      "guestPhone": "+12025550188",
+      "partySize": 2,
+      "start": "2026-10-24T18:04:54.528Z",
+      "end": "2026-10-24T19:34:54.528Z",
+      "status": "confirmed",
+      "code": "M4T8",
+      "notes": "Anniversary celebration",
+      "source": "phone",
+      "callId": "call_VS_3aK9mP1b",
+      "idempotencyKey": "7e2a1b9c-4d5f-4a6c-9e1b-3d5f7a9c1e2b"
+    }
+  ],
+  "messages": [
+    {
+      "id": "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f",
+      "restaurantId": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f",
+      "callerName": "Rohan Mehta",
+      "callerPhone": "+12025550163",
+      "topic": "large_party",
+      "details": "Birthday dinner for 14 on Friday 13 November around 8 PM. Asked about a set menu and cake policy.",
+      "status": "new",
+      "callId": "call_RM_7xQ2pL9a"
+    },
+    {
+      "id": "8e7d6c5b-4a3d-4b2c-7d1e-0a9b8c7d6e5f",
+      "restaurantId": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f",
+      "callerName": "Priya Sharma",
+      "callerPhone": "+12025550192",
+      "topic": "catering",
+      "details": "Inquiring about corporate lunch buffet catering for 35 people next Thursday.",
+      "status": "in_progress",
+      "callId": "call_PS_2bJ8kQ0a"
+    }
+  ],
+  "calls": [
+    {
+      "id": "4d6f8a0c-2e4a-4c6e-9a1c-3e5a7c9e1b3d",
+      "restaurantId": "6f1c2a9e-3b7d-4c5a-9e2f-1a8b7c6d5e4f",
+      "callId": "call_RM_7xQ2pL9a",
+      "channel": "phone",
+      "callerNumber": "+12025550147",
+      "dialedNumber": "+14155550123",
+      "startedAt": "2026-10-24T13:04:54.528Z",
+      "endedAt": "2026-10-24T13:07:24.528Z",
+      "language": "en",
+      "outcome": "booked",
+      "recordingUrl": null,
+      "turns": [
+        {
+          "index": 0,
+          "speaker": "agent",
+          "text": "Thanks for calling The Saffron Table. I'm the restaurant's AI assistant. How can I help you today?",
+          "at": "2026-10-24T13:04:54.528Z",
+          "interrupted": false,
+          "latency": null
+        },
+        {
+          "index": 1,
+          "speaker": "caller",
+          "text": "Hi! I'd like to book a table for four this evening at 7:30 PM under Asha Rao.",
+          "at": "2026-10-24T13:05:09.528Z",
+          "interrupted": false,
+          "latency": null
+        },
+        {
+          "index": 2,
+          "speaker": "agent",
+          "text": "Let me check availability for four. Yes, 7:30 PM is available for 4. Shall I confirm this booking for Asha Rao?",
+          "at": "2026-10-24T13:05:14.528Z",
+          "interrupted": false,
+          "latency": {
+            "eou_ms": 205,
+            "stt_ms": 135,
+            "llm_ttft_ms": 395,
+            "tts_ttfb_ms": 92,
+            "total_ms": 692,
+            "llm_model": "gemini-2.5-flash"
+          }
+        },
+        {
+          "index": 3,
+          "speaker": "caller",
+          "text": "Yes please, window table if possible.",
+          "at": "2026-10-24T13:05:24.528Z",
+          "interrupted": false,
+          "latency": null
+        },
+        {
+          "index": 4,
+          "speaker": "agent",
+          "text": "You're all set! Table for 4, tonight at 7:30 PM. Your booking code is K7Q2. We look forward to welcoming you!",
+          "at": "2026-10-24T13:05:29.528Z",
+          "interrupted": false,
+          "latency": {
+            "eou_ms": 198,
+            "stt_ms": 128,
+            "llm_ttft_ms": 380,
+            "tts_ttfb_ms": 88,
+            "total_ms": 666,
+            "llm_model": "gemini-2.5-flash"
+          }
+        }
+      ]
+    }
+  ]
+}
