@@ -52,6 +52,8 @@ async function handleTokenRequest(request: Request) {
     });
   }
 
+  if (process.env.NODE_ENV === "development") warmAgentRoutes(url.origin, restaurantPhone);
+
   try {
     const at = new AccessToken(apiKey, apiSecret, {
       identity,
@@ -86,4 +88,24 @@ async function handleTokenRequest(request: Request) {
       { status: 500 }
     );
   }
+}
+
+// Next.js dev compiles each API route on its first request, which takes longer than the agent's
+// 4-second API timeout: the first call after `pnpm dev` heard "I can't reach our booking system".
+// Touch the routes the agent calls while it's still joining the room. Without the agent key they
+// answer 401 before any database work.
+function warmAgentRoutes(origin: string, restaurantPhone: string) {
+  const id = seedData.restaurant.id;
+  const paths = [
+    `/api/agent/restaurants/by-number/${encodeURIComponent(restaurantPhone)}`,
+    `/api/agent/restaurants/${id}/info`,
+    `/api/agent/restaurants/${id}/menu`,
+    `/api/agent/restaurants/${id}/availability`,
+    "/api/agent/reservations",
+    "/api/agent/reservations/warmup",
+    "/api/agent/reservations/warmup/cancel",
+    "/api/agent/messages",
+    "/api/agent/calls"
+  ];
+  for (const path of paths) fetch(`${origin}${path}`).catch(() => {});
 }

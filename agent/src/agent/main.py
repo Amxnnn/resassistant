@@ -66,6 +66,7 @@ DEFAULT_GROQ_MODELS = "openai/gpt-oss-120b,openai/gpt-oss-20b"
 RETRY_FAILED_LLM_AFTER = 20.0
 
 NOT_SET_UP = "Sorry, this number isn't set up yet. Please try again later. Goodbye!"
+API_DOWN = "Sorry, I can't reach our booking system right now. Please call back in a few minutes. Goodbye!"
 
 
 def groq_models() -> list[str]:
@@ -186,6 +187,19 @@ async def identify_call(ctx: JobContext) -> CallInfo:
     return CallInfo("browser", None, attrs.get("restaurant_phone") or default, participant.identity)
 
 
+async def release_console_audio() -> None:
+    """Console mode: close the terminal's microphone and speaker before the job's event loop closes.
+
+    LiveKit's built-in console (livekit-agents 1.8) leaves both running when a call ends, by hang-up
+    or Ctrl+C. Every audio callback then fails with "Event loop is closed", which Windows shows as
+    one error dialog after another.
+    """
+    console = cli.AgentsConsole.get_instance()
+    for name in ("set_microphone_enabled", "set_speaker_enabled"):
+        if set_enabled := getattr(console, name, None):  # only the built-in console has its own audio
+            set_enabled(False)
+
+
 def prewarm(proc: JobProcess) -> None:
     # Load once per worker process, not once per call. End-of-turn detection only starts after
     # this much silence, so it sets a floor on every reply: Silero's 0.55 s default added ~0.25 s
@@ -293,6 +307,8 @@ async def entrypoint(ctx: JobContext) -> None:
         await api.aclose()
 
     ctx.add_shutdown_callback(close_call)
+    if ctx.is_fake_job():
+        ctx.add_shutdown_callback(release_console_audio)
     session_closed = asyncio.Event()
     session.on("close", lambda _ev: session_closed.set())
 
@@ -327,8 +343,17 @@ async def entrypoint(ctx: JobContext) -> None:
     try:
         restaurant = await settings
     except ApiError as e:
-        logger.error("no restaurant for dialed number %s: %s", call.dialed, e)
-        await limits.hang_up(NOT_SET_UP, reason="no restaurant for this number")
+        if e.code == "not_found":
+            logger.error("no restaurant for dialed number %s: %s", call.dialed, e)
+            await limits.hang_up(NOT_SET_UP, reason="no restaurant for this number")
+        else:  # the API is down or refused the request (a wrong AGENT_API_KEY): not the number's fault
+            logger.error(
+                "couldn't load the restaurant for %s from the tool API at %s (is the web app running?): %s",
+                call.dialed,
+                os.getenv("API_BASE_URL"),
+                e,
+            )
+            await limits.hang_up(API_DOWN, reason="tool API unavailable")
         return
     state = CallState(api=api, restaurant=restaurant, call_id=call_id, caller_phone=call.caller_phone)
     state.end_call = limits.end_after
