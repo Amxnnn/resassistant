@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="orb" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffb06e"/>
+      <stop offset="0.35" stop-color="#e4682c"/>
+      <stop offset="0.68" stop-color="#b8386f"/>
+      <stop offset="1" stop-color="#5b6cf0"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="#000"/>
+  <g fill="url(#orb)" transform="translate(16 16) scale(1.08)">
+    <circle cx="-3.6" cy="-7.8" r="1.1"/><circle cx="0" cy="-7.8" r="1.2"/><circle cx="3.6" cy="-7.8" r="1.1"/>
+    <circle cx="-6" cy="-3.9" r="1.15"/><circle cx="-2" cy="-3.9" r="1.45"/><circle cx="2" cy="-3.9" r="1.45"/><circle cx="6" cy="-3.9" r="1.15"/>
+    <circle cx="-8" cy="0" r="1.05"/><circle cx="-4" cy="0" r="1.45"/><circle cx="0" cy="0" r="1.55"/><circle cx="4" cy="0" r="1.45"/><circle cx="8" cy="0" r="1.05"/>
+    <circle cx="-6" cy="3.9" r="1.15"/><circle cx="-2" cy="3.9" r="1.45"/><circle cx="2" cy="3.9" r="1.45"/><circle cx="6" cy="3.9" r="1.15"/>
+    <circle cx="-3.6" cy="7.8" r="1.1"/><circle cx="0" cy="7.8" r="1.2"/><circle cx="3.6" cy="7.8" r="1.1"/>
+  </g>
+</svg>

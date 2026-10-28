@@ -1,0 +1,771 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T12:44:01+00:00",
+  "title": "Design System: Hostline",
+  "extensions": {
+    "colorMeta": {
+      "rust-500": {
+        "role": "primary",
+        "displayName": "Saddle Rust",
+        "canonical": "#b4491a",
+        "tonalRamp": [
+          "oklch(15% 0.150 41.2)",
+          "oklch(26% 0.150 41.2)",
+          "oklch(37% 0.150 41.2)",
+          "oklch(48% 0.150 41.2)",
+          "oklch(59% 0.150 41.2)",
+          "oklch(70% 0.150 41.2)",
+          "oklch(82% 0.150 41.2)",
+          "oklch(95% 0.150 41.2)"
+        ]
+      },
+      "card-rust": {
+        "role": "primary",
+        "displayName": "Card Rust",
+        "canonical": "#a8441a",
+        "tonalRamp": [
+          "oklch(15% 0.142 40.8)",
+          "oklch(26% 0.142 40.8)",
+          "oklch(37% 0.142 40.8)",
+          "oklch(48% 0.142 40.8)",
+          "oklch(59% 0.142 40.8)",
+          "oklch(70% 0.142 40.8)",
+          "oklch(82% 0.142 40.8)",
+          "oklch(95% 0.142 40.8)"
+        ]
+      },
+      "rust-deep": {
+        "role": "primary",
+        "displayName": "Rust Deep",
+        "canonical": "#6e2a10",
+        "tonalRamp": [
+          "oklch(15% 0.104 39.8)",
+          "oklch(26% 0.104 39.8)",
+          "oklch(37% 0.104 39.8)",
+          "oklch(48% 0.104 39.8)",
+          "oklch(59% 0.104 39.8)",
+          "oklch(70% 0.104 39.8)",
+          "oklch(82% 0.104 39.8)",
+          "oklch(95% 0.104 39.8)"
+        ]
+      },
+      "rust-char": {
+        "role": "primary",
+        "displayName": "Rust Char",
+        "canonical": "#2a120a",
+        "tonalRamp": [
+          "oklch(15% 0.043 39.1)",
+          "oklch(26% 0.043 39.1)",
+          "oklch(37% 0.043 39.1)",
+          "oklch(48% 0.043 39.1)",
+          "oklch(59% 0.043 39.1)",
+          "oklch(70% 0.043 39.1)",
+          "oklch(82% 0.043 39.1)",
+          "oklch(95% 0.043 39.1)"
+        ]
+      },
+      "glow-ember": {
+        "role": "primary",
+        "displayName": "Ember Glow",
+        "canonical": "#8f3a16",
+        "tonalRamp": [
+          "oklch(15% 0.125 41.1)",
+          "oklch(26% 0.125 41.1)",
+          "oklch(37% 0.125 41.1)",
+          "oklch(48% 0.125 41.1)",
+          "oklch(59% 0.125 41.1)",
+          "oklch(70% 0.125 41.1)",
+          "oklch(82% 0.125 41.1)",
+          "oklch(95% 0.125 41.1)"
+        ]
+      },
+      "ember-orange": {
+        "role": "secondary",
+        "displayName": "Ember Orange",
+        "canonical": "#e4682c",
+        "tonalRamp": [
+          "oklch(15% 0.170 43.5)",
+          "oklch(26% 0.170 43.5)",
+          "oklch(37% 0.170 43.5)",
+          "oklch(48% 0.170 43.5)",
+          "oklch(59% 0.170 43.5)",
+          "oklch(70% 0.170 43.5)",
+          "oklch(82% 0.170 43.5)",
+          "oklch(95% 0.170 43.5)"
+        ]
+      },
+      "band-orange": {
+        "role": "secondary",
+        "displayName": "Band Orange",
+        "canonical": "#dc6224",
+        "tonalRamp": [
+          "oklch(15% 0.169 43.8)",
+          "oklch(26% 0.169 43.8)",
+          "oklch(37% 0.169 43.8)",
+          "oklch(48% 0.169 43.8)",
+          "oklch(59% 0.169 43.8)",
+          "oklch(70% 0.169 43.8)",
+          "oklch(82% 0.169 43.8)",
+          "oklch(95% 0.169 43.8)"
+        ]
+      },
+      "peach": {
+        "role": "tertiary",
+        "displayName": "Peach",
+        "canonical": "#f4c3a0",
+        "tonalRamp": [
+          "oklch(15% 0.073 57.1)",
+          "oklch(26% 0.073 57.1)",
+          "oklch(37% 0.073 57.1)",
+          "oklch(48% 0.073 57.1)",
+          "oklch(59% 0.073 57.1)",
+          "oklch(70% 0.073 57.1)",
+          "oklch(82% 0.073 57.1)",
+          "oklch(95% 0.073 57.1)"
+        ]
+      },
+      "confirm-green": {
+        "role": "tertiary",
+        "displayName": "Confirm Green",
+        "canonical": "#7ee2a0",
+        "tonalRamp": [
+          "oklch(15% 0.133 153.6)",
+          "oklch(26% 0.133 153.6)",
+          "oklch(37% 0.133 153.6)",
+          "oklch(48% 0.133 153.6)",
+          "oklch(59% 0.133 153.6)",
+          "oklch(70% 0.133 153.6)",
+          "oklch(82% 0.133 153.6)",
+          "oklch(95% 0.133 153.6)"
+        ]
+      },
+      "call-green": {
+        "role": "tertiary",
+        "displayName": "Call Green (iOS)",
+        "canonical": "#34c759",
+        "tonalRamp": [
+          "oklch(15% 0.194 147.4)",
+          "oklch(26% 0.194 147.4)",
+          "oklch(37% 0.194 147.4)",
+          "oklch(48% 0.194 147.4)",
+          "oklch(59% 0.194 147.4)",
+          "oklch(70% 0.194 147.4)",
+          "oklch(82% 0.194 147.4)",
+          "oklch(95% 0.194 147.4)"
+        ]
+      },
+      "call-red": {
+        "role": "tertiary",
+        "displayName": "Call Red (iOS)",
+        "canonical": "#ff3b30",
+        "tonalRamp": [
+          "oklch(15% 0.200 28.7)",
+          "oklch(26% 0.200 28.7)",
+          "oklch(37% 0.200 28.7)",
+          "oklch(48% 0.200 28.7)",
+          "oklch(59% 0.200 28.7)",
+          "oklch(70% 0.200 28.7)",
+          "oklch(82% 0.200 28.7)",
+          "oklch(95% 0.200 28.7)"
+        ]
+      },
+      "orb-amber": {
+        "role": "tertiary",
+        "displayName": "Orb Amber",
+        "canonical": "#ffb573",
+        "tonalRamp": [
+          "oklch(15% 0.119 61.7)",
+          "oklch(26% 0.119 61.7)",
+          "oklch(37% 0.119 61.7)",
+          "oklch(48% 0.119 61.7)",
+          "oklch(59% 0.119 61.7)",
+          "oklch(70% 0.119 61.7)",
+          "oklch(82% 0.119 61.7)",
+          "oklch(95% 0.119 61.7)"
+        ]
+      },
+      "orb-ember": {
+        "role": "tertiary",
+        "displayName": "Orb Ember",
+        "canonical": "#f25e29",
+        "tonalRamp": [
+          "oklch(15% 0.193 38.5)",
+          "oklch(26% 0.193 38.5)",
+          "oklch(37% 0.193 38.5)",
+          "oklch(48% 0.193 38.5)",
+          "oklch(59% 0.193 38.5)",
+          "oklch(70% 0.193 38.5)",
+          "oklch(82% 0.193 38.5)",
+          "oklch(95% 0.193 38.5)"
+        ]
+      },
+      "orb-rose": {
+        "role": "tertiary",
+        "displayName": "Orb Rose",
+        "canonical": "#bd3870",
+        "tonalRamp": [
+          "oklch(15% 0.175 358.9)",
+          "oklch(26% 0.175 358.9)",
+          "oklch(37% 0.175 358.9)",
+          "oklch(48% 0.175 358.9)",
+          "oklch(59% 0.175 358.9)",
+          "oklch(70% 0.175 358.9)",
+          "oklch(82% 0.175 358.9)",
+          "oklch(95% 0.175 358.9)"
+        ]
+      },
+      "orb-iris": {
+        "role": "tertiary",
+        "displayName": "Orb Iris",
+        "canonical": "#616ef5",
+        "tonalRamp": [
+          "oklch(15% 0.200 274.5)",
+          "oklch(26% 0.200 274.5)",
+          "oklch(37% 0.200 274.5)",
+          "oklch(48% 0.200 274.5)",
+          "oklch(59% 0.200 274.5)",
+          "oklch(70% 0.200 274.5)",
+          "oklch(82% 0.200 274.5)",
+          "oklch(95% 0.200 274.5)"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Ground",
+        "canonical": "#000000",
+        "tonalRamp": [
+          "#000000",
+          "#080505",
+          "#0d0a09",
+          "#120806",
+          "#121010",
+          "#1a1310",
+          "#1d0e08",
+          "#2a120a"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Warm Ink",
+        "canonical": "#f3efe9",
+        "tonalRamp": [
+          "oklch(15% 0.009 78.3)",
+          "oklch(26% 0.009 78.3)",
+          "oklch(37% 0.009 78.3)",
+          "oklch(48% 0.009 78.3)",
+          "oklch(59% 0.009 78.3)",
+          "oklch(70% 0.009 78.3)",
+          "oklch(82% 0.009 78.3)",
+          "oklch(95% 0.009 78.3)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink 2 (74%)",
+        "canonical": "warm ink #f3efe9 at alpha",
+        "tonalRamp": [
+          "rgba(243,239,233,0.06)",
+          "rgba(243,239,233,0.13)",
+          "rgba(243,239,233,0.2)",
+          "rgba(243,239,233,0.34)",
+          "rgba(243,239,233,0.58)",
+          "rgba(243,239,233,0.74)",
+          "rgba(243,239,233,0.88)",
+          "rgba(243,239,233,1)"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Ink 3 (58%)",
+        "canonical": "warm ink #f3efe9 at alpha",
+        "tonalRamp": [
+          "rgba(243,239,233,0.06)",
+          "rgba(243,239,233,0.13)",
+          "rgba(243,239,233,0.2)",
+          "rgba(243,239,233,0.34)",
+          "rgba(243,239,233,0.58)",
+          "rgba(243,239,233,0.74)",
+          "rgba(243,239,233,0.88)",
+          "rgba(243,239,233,1)"
+        ]
+      },
+      "hair": {
+        "role": "neutral",
+        "displayName": "Hair (13%)",
+        "canonical": "warm ink #f3efe9 at alpha",
+        "tonalRamp": [
+          "rgba(243,239,233,0.06)",
+          "rgba(243,239,233,0.13)",
+          "rgba(243,239,233,0.2)",
+          "rgba(243,239,233,0.34)",
+          "rgba(243,239,233,0.58)",
+          "rgba(243,239,233,0.74)",
+          "rgba(243,239,233,0.88)",
+          "rgba(243,239,233,1)"
+        ]
+      },
+      "veil": {
+        "role": "neutral",
+        "displayName": "Veil (6%)",
+        "canonical": "warm ink #f3efe9 at alpha",
+        "tonalRamp": [
+          "rgba(243,239,233,0.06)",
+          "rgba(243,239,233,0.13)",
+          "rgba(243,239,233,0.2)",
+          "rgba(243,239,233,0.34)",
+          "rgba(243,239,233,0.58)",
+          "rgba(243,239,233,0.74)",
+          "rgba(243,239,233,0.88)",
+          "rgba(243,239,233,1)"
+        ]
+      },
+      "pill-black": {
+        "role": "neutral",
+        "displayName": "Pill Black",
+        "canonical": "#0d0a09",
+        "tonalRamp": [
+          "oklch(15% 0.006 40.0)",
+          "oklch(26% 0.006 40.0)",
+          "oklch(37% 0.006 40.0)",
+          "oklch(48% 0.006 40.0)",
+          "oklch(59% 0.006 40.0)",
+          "oklch(70% 0.006 40.0)",
+          "oklch(82% 0.006 40.0)",
+          "oklch(95% 0.006 40.0)"
+        ]
+      },
+      "pill-black-hover": {
+        "role": "neutral",
+        "displayName": "Pill Black Hover",
+        "canonical": "#1a1310",
+        "tonalRamp": [
+          "oklch(15% 0.013 44.4)",
+          "oklch(26% 0.013 44.4)",
+          "oklch(37% 0.013 44.4)",
+          "oklch(48% 0.013 44.4)",
+          "oklch(59% 0.013 44.4)",
+          "oklch(70% 0.013 44.4)",
+          "oklch(82% 0.013 44.4)",
+          "oklch(95% 0.013 44.4)"
+        ]
+      },
+      "slab-dark": {
+        "role": "neutral",
+        "displayName": "Slab Dark",
+        "canonical": "#121010",
+        "tonalRamp": [
+          "oklch(15% 0.003 17.5)",
+          "oklch(26% 0.003 17.5)",
+          "oklch(37% 0.003 17.5)",
+          "oklch(48% 0.003 17.5)",
+          "oklch(59% 0.003 17.5)",
+          "oklch(70% 0.003 17.5)",
+          "oklch(82% 0.003 17.5)",
+          "oklch(95% 0.003 17.5)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ebe7e1",
+        "tonalRamp": [
+          "oklch(15% 0.009 78.3)",
+          "oklch(26% 0.009 78.3)",
+          "oklch(37% 0.009 78.3)",
+          "oklch(48% 0.009 78.3)",
+          "oklch(59% 0.009 78.3)",
+          "oklch(70% 0.009 78.3)",
+          "oklch(82% 0.009 78.3)",
+          "oklch(95% 0.009 78.3)"
+        ]
+      },
+      "on-paper": {
+        "role": "neutral",
+        "displayName": "On Paper",
+        "canonical": "#0c0807",
+        "tonalRamp": [
+          "oklch(15% 0.008 36.6)",
+          "oklch(26% 0.008 36.6)",
+          "oklch(37% 0.008 36.6)",
+          "oklch(48% 0.008 36.6)",
+          "oklch(59% 0.008 36.6)",
+          "oklch(70% 0.008 36.6)",
+          "oklch(82% 0.008 36.6)",
+          "oklch(95% 0.008 36.6)"
+        ]
+      },
+      "on-paper-2": {
+        "role": "neutral",
+        "displayName": "On Paper 2",
+        "canonical": "#3d3631",
+        "tonalRamp": [
+          "oklch(15% 0.013 57.8)",
+          "oklch(26% 0.013 57.8)",
+          "oklch(37% 0.013 57.8)",
+          "oklch(48% 0.013 57.8)",
+          "oklch(59% 0.013 57.8)",
+          "oklch(70% 0.013 57.8)",
+          "oklch(82% 0.013 57.8)",
+          "oklch(95% 0.013 57.8)"
+        ]
+      },
+      "on-rust": {
+        "role": "neutral",
+        "displayName": "On Rust",
+        "canonical": "#f8e2d6",
+        "tonalRamp": [
+          "oklch(15% 0.029 50.6)",
+          "oklch(26% 0.029 50.6)",
+          "oklch(37% 0.029 50.6)",
+          "oklch(48% 0.029 50.6)",
+          "oklch(59% 0.029 50.6)",
+          "oklch(70% 0.029 50.6)",
+          "oklch(82% 0.029 50.6)",
+          "oklch(95% 0.029 50.6)"
+        ]
+      },
+      "on-band": {
+        "role": "neutral",
+        "displayName": "On Band",
+        "canonical": "#140905",
+        "tonalRamp": [
+          "oklch(15% 0.022 45.0)",
+          "oklch(26% 0.022 45.0)",
+          "oklch(37% 0.022 45.0)",
+          "oklch(48% 0.022 45.0)",
+          "oklch(59% 0.022 45.0)",
+          "oklch(70% 0.022 45.0)",
+          "oklch(82% 0.022 45.0)",
+          "oklch(95% 0.022 45.0)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "One per page: hero, close, demo, sign-in. Instrument Serif, balanced wrap."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "One section statement per section; desktop story steps."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Outcome slabs, story steps, rule terms, race line, call name, pass title."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Under display lines, ink-2, max 36em."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Explanations, ink-2, max 30-34em."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Pill text only, uppercase."
+      },
+      "fineprint": {
+        "displayName": "Fineprint",
+        "purpose": "Disclaimers, ink-3, max 52ch."
+      },
+      "figures": {
+        "displayName": "Figures",
+        "purpose": "Times, codes, clocks: tabular-nums; codes tracked 0.08em."
+      }
+    },
+    "shadows": [
+      {
+        "name": "device",
+        "value": "0 calc(var(--pt) * 44) calc(var(--pt) * 80) calc(var(--pt) * -12) rgba(0,0,0,0.75), 0 calc(var(--pt) * 8) calc(var(--pt) * 20) rgba(0,0,0,0.45), inset 0 0 0 calc(var(--pt) * 0.8) rgba(255,255,255,0.18)",
+        "purpose": "The iPhone body only; the one real drop shadow."
+      },
+      {
+        "name": "hair-ring",
+        "value": "inset 0 0 0 1px rgba(243,239,233,0.13)",
+        "purpose": "Dark slab, race figure, asks, fields."
+      },
+      {
+        "name": "pill-ring",
+        "value": "inset 0 0 0 1px rgba(243,239,233,0.2)",
+        "purpose": "Black pill; 0.34 on hover."
+      },
+      {
+        "name": "glass-ring",
+        "value": "inset 0 0 0 1px rgba(255,255,255,0.1)",
+        "purpose": "Booking pass and composer inside the phone."
+      },
+      {
+        "name": "focus-field",
+        "value": "inset 0 0 0 1.5px #f4c3a0",
+        "purpose": "Focused field; the in-phone composer uses rgba(244,195,160,0.75)."
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 2px solid #f4c3a0; outline-offset: 3px",
+        "purpose": "Keyboard focus across the site (offset 2px inside the phone)."
+      },
+      {
+        "name": "confirm-halo",
+        "value": "0 0 0 calc(var(--pt) * 3) rgba(126,226,160,0.2)",
+        "purpose": "The pass's dot once confirmed."
+      },
+      {
+        "name": "phone-halo",
+        "value": "radial-gradient(closest-side, rgba(180,73,26,0.36), rgba(110,42,16,0.14) 55%, transparent 100%)",
+        "purpose": "Warm light behind every framed phone, 200% of its width."
+      },
+      {
+        "name": "stage-glow-top",
+        "value": "radial-gradient(64% 54% at 50% 0%, rgba(143,58,22,0.62), rgba(74,28,12,0.28) 48%, transparent 78%), #000000",
+        "purpose": "Hero stage light; sign-in uses 60% 46% at 0.5 alpha."
+      },
+      {
+        "name": "stage-glow-close",
+        "value": "radial-gradient(70% 50% at 50% 62%, rgba(143,58,22,0.42), rgba(74,28,12,0.16) 50%, transparent 80%)",
+        "purpose": "Close section light under the orb."
+      },
+      {
+        "name": "rust-slab",
+        "value": "radial-gradient(130% 120% at 0% 100%, #a8441a 0%, #6e2a10 34%, #2a120a 64%, #120806 100%)",
+        "purpose": "Outcome slab fill, lit from a bottom corner (mirrored to 100% 100% for the message slab)."
+      },
+      {
+        "name": "pass",
+        "value": "radial-gradient(130% 140% at 0% 100%, #b4491a 0%, #6e2a10 46%, #2a120a 100%)",
+        "purpose": "Booking pass fill."
+      },
+      {
+        "name": "phone-screen",
+        "value": "radial-gradient(120% 55% at 50% 30%, #1d0e08 0%, #080505 58%, #000000 100%)",
+        "purpose": "The call screen behind the orb."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The one curve for entrances, transforms and step changes."
+      },
+      {
+        "name": "hover",
+        "value": "200ms ease",
+        "purpose": "Colour, fill and ring changes on pills, links, asks, fields."
+      },
+      {
+        "name": "pill-arrow",
+        "value": "translate(2px, -2px) 300ms var(--ease)",
+        "purpose": "Arrow nudge on pill hover; press scales to 0.98."
+      },
+      {
+        "name": "rise",
+        "value": "1.2s var(--ease), from translateY(24px) blur(6px) opacity 0",
+        "purpose": "Hero entrance, staggered 0s / 0.14s / 0.26s; also the race's spoken line (900ms)."
+      },
+      {
+        "name": "device-rise",
+        "value": "1.6s var(--ease) 0.2s, from translateY(120px) opacity 0",
+        "purpose": "The iPhone rising from the bottom edge."
+      },
+      {
+        "name": "line-in",
+        "value": "420ms var(--ease), from translateY(8pt) opacity 0",
+        "purpose": "Each caption line."
+      },
+      {
+        "name": "fact-in",
+        "value": "500ms ease, from translateY(4pt) blur(4px) opacity 0",
+        "purpose": "Each booking fact as it lands."
+      },
+      {
+        "name": "pass-unfold",
+        "value": "grid-template-rows 0fr to 1fr 600ms var(--ease); pass-in 700ms from translateY(20pt) scale(0.97)",
+        "purpose": "The booking pass appearing under the call."
+      },
+      {
+        "name": "story-step",
+        "value": "opacity 600ms, transform 900ms, filter 600ms var(--ease); from translateY(18px) blur(6px)",
+        "purpose": "Desktop scroll story step cross-fade; GSAP ScrollTrigger scrub 0.7 over 480vh."
+      },
+      {
+        "name": "rail",
+        "value": "scaleX 700ms var(--ease)",
+        "purpose": "Step progress rail fill."
+      },
+      {
+        "name": "orb-state",
+        "value": "GSAP power3.out 0.7s (0.9s into thinking)",
+        "purpose": "Orb tweens between idle, listening, thinking, speaking."
+      },
+      {
+        "name": "orb-fade",
+        "value": "opacity 900ms ease",
+        "purpose": "Canvas in, poster out, once WebGL draws."
+      },
+      {
+        "name": "race",
+        "value": "bar-grow 900ms var(--ease) at 100ms / 600ms; bar-reject shake 520ms at 1500ms; chip-in 500ms at 1650ms; rise 900ms at 2000ms",
+        "purpose": "The double-booking race, played once on view."
+      },
+      {
+        "name": "band",
+        "value": "translateX(-50%) linear infinite, 110s and 140s, second row reversed",
+        "purpose": "Facts band marquee; paused on hover or focus."
+      },
+      {
+        "name": "reduced",
+        "value": "animation and transition 1ms; orb motion 15%; scroll story off; band static and scrollable",
+        "purpose": "prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "640px",
+        "purpose": "max-width: one-column outcomes and story, 24px slabs, nav link hidden, frameless live call."
+      },
+      {
+        "name": "demo-stack",
+        "value": "860px",
+        "purpose": "max-width: demo phone above copy."
+      },
+      {
+        "name": "compact-nav",
+        "value": "960px",
+        "purpose": "max-width: nav 64px, outcomes two columns with headline on top."
+      },
+      {
+        "name": "rules-stack",
+        "value": "1099px",
+        "purpose": "max-width: rules figure and copy stack, copy first."
+      },
+      {
+        "name": "scrolly",
+        "value": "min-width 1100px and min-height 680px",
+        "purpose": "Pinned scroll story and wider phone (motion allowed)."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Pill",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action in a group: warm-ink pill, uppercase label, outbound arrow.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-pill ds-pill-light\">Talk to it now <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 7h10v10\"/><path d=\"M7 17 17 7\"/></svg></button></div>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-stage{background:#000;padding:24px} .ds-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border:0;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;line-height:1;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap;cursor:pointer;transition:background-color 200ms ease,color 200ms ease,box-shadow 200ms ease,transform 200ms var(--ease)} .ds-pill svg{transition:transform 300ms var(--ease)} .ds-pill:hover svg{transform:translate(2px,-2px)} .ds-pill:active{transform:scale(.98)} .ds-pill:focus-visible{outline:2px solid var(--peach);outline-offset:3px} .ds-pill-light{background:var(--ink);color:#0c0807} .ds-pill-light:hover{background:#fff}"
+    },
+    {
+      "name": "Secondary Pill",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The alternative action: black pill with a hair ring.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-pill ds-pill-dark\">Open the dashboard</button></div>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-stage{background:#000;padding:24px} .ds-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border:0;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;line-height:1;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap;cursor:pointer;transition:background-color 200ms ease,color 200ms ease,box-shadow 200ms ease,transform 200ms var(--ease)} .ds-pill svg{transition:transform 300ms var(--ease)} .ds-pill:hover svg{transform:translate(2px,-2px)} .ds-pill:active{transform:scale(.98)} .ds-pill:focus-visible{outline:2px solid var(--peach);outline-offset:3px} .ds-pill-dark{background:#0d0a09;color:var(--ink);box-shadow:inset 0 0 0 1px rgba(243,239,233,.2)} .ds-pill-dark:hover{background:#1a1310;box-shadow:inset 0 0 0 1px rgba(243,239,233,.34)}"
+    },
+    {
+      "name": "Ask Chip",
+      "kind": "chip",
+      "refersTo": "chip-ask",
+      "description": "A suggested question that sends itself into the demo call.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-ask\">Is the paneer tikka spicy?</button> <button class=\"ds-ask\">Table for 4 tonight at 8</button></div>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-stage{background:#000;padding:24px;display:flex;gap:8px;flex-wrap:wrap} .ds-ask{min-height:38px;padding:8px 16px;border:0;border-radius:999px;font-family:var(--sans);font-size:14px;line-height:1.35;color:var(--ink);background:rgba(243,239,233,.06);box-shadow:inset 0 0 0 1px var(--hair);cursor:pointer;transition:background-color 200ms ease,box-shadow 200ms ease} .ds-ask:hover{background:rgba(243,239,233,.12);box-shadow:inset 0 0 0 1px rgba(243,239,233,.26)} .ds-ask:focus-visible{outline:2px solid var(--peach);outline-offset:3px}"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Sign-in field on black: veil fill, hair ring, peach ring on focus.",
+      "html": "<div class=\"ds-stage\"><label class=\"ds-field\"><span>Email</span><input placeholder=\"host@example.com\"></label></div>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-stage{background:#000;padding:24px} .ds-field{display:flex;flex-direction:column;gap:6px;font-family:var(--sans)} .ds-field span{padding-left:4px;font-size:13px;color:var(--ink-2)} .ds-field input{height:52px;padding:0 18px;border:0;border-radius:16px;background:rgba(243,239,233,.06);box-shadow:inset 0 0 0 1px var(--hair);color:var(--ink);font-size:16px;outline:none;transition:box-shadow 200ms ease,background-color 200ms ease} .ds-field input::placeholder{color:var(--ink-3)} .ds-field input:focus{background:rgba(243,239,233,.08);box-shadow:inset 0 0 0 1.5px var(--peach)}"
+    },
+    {
+      "name": "Floating Nav",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Barless nav over a black fade: dot mark and name left, sign-in link and small white pill right.",
+      "html": "<header class=\"ds-nav\"><a class=\"ds-brand\" href=\"#\"><svg width=\"22\" height=\"22\" viewBox=\"-12 -12 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"-3.6\" cy=\"-7.8\" r=\"1\" opacity=\"0.62\"/><circle cx=\"0\" cy=\"-7.8\" r=\"1.1\" opacity=\"0.62\"/><circle cx=\"3.6\" cy=\"-7.8\" r=\"1\" opacity=\"0.62\"/><circle cx=\"-6\" cy=\"-3.9\" r=\"1.05\" opacity=\"0.62\"/><circle cx=\"-2\" cy=\"-3.9\" r=\"1.35\" opacity=\"1\"/><circle cx=\"2\" cy=\"-3.9\" r=\"1.35\" opacity=\"1\"/><circle cx=\"6\" cy=\"-3.9\" r=\"1.05\" opacity=\"0.62\"/><circle cx=\"-8\" cy=\"0\" r=\"0.95\" opacity=\"0.62\"/><circle cx=\"-4\" cy=\"0\" r=\"1.35\" opacity=\"1\"/><circle cx=\"0\" cy=\"0\" r=\"1.45\" opacity=\"1\"/><circle cx=\"4\" cy=\"0\" r=\"1.35\" opacity=\"1\"/><circle cx=\"8\" cy=\"0\" r=\"0.95\" opacity=\"0.62\"/><circle cx=\"-6\" cy=\"3.9\" r=\"1.05\" opacity=\"0.62\"/><circle cx=\"-2\" cy=\"3.9\" r=\"1.35\" opacity=\"1\"/><circle cx=\"2\" cy=\"3.9\" r=\"1.35\" opacity=\"1\"/><circle cx=\"6\" cy=\"3.9\" r=\"1.05\" opacity=\"0.62\"/><circle cx=\"-3.6\" cy=\"7.8\" r=\"1\" opacity=\"0.62\"/><circle cx=\"0\" cy=\"7.8\" r=\"1.1\" opacity=\"0.62\"/><circle cx=\"3.6\" cy=\"7.8\" r=\"1\" opacity=\"0.62\"/></svg>Hostline</a><nav class=\"ds-actions\"><a class=\"ds-link\" href=\"#\">Staff sign in</a><a class=\"ds-pill ds-pill-light ds-pill-sm\" href=\"#\">Try the demo <svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 7h10v10\"/><path d=\"M7 17 17 7\"/></svg></a></nav></header>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border:0;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;line-height:1;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap;cursor:pointer;transition:background-color 200ms ease,color 200ms ease,box-shadow 200ms ease,transform 200ms var(--ease)} .ds-pill svg{transition:transform 300ms var(--ease)} .ds-pill:hover svg{transform:translate(2px,-2px)} .ds-pill:active{transform:scale(.98)} .ds-pill:focus-visible{outline:2px solid var(--peach);outline-offset:3px} .ds-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;height:72px;padding:0 32px;background:linear-gradient(to bottom,rgba(0,0,0,.74),rgba(0,0,0,0)),#000;font-family:var(--sans)} .ds-brand{display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:600;letter-spacing:-.02em;color:var(--ink);text-decoration:none} .ds-actions{display:flex;align-items:center;gap:22px} .ds-link{font-size:14px;color:var(--ink-2);text-decoration:none;transition:color 200ms ease} .ds-link:hover{color:var(--ink)} .ds-link:focus-visible,.ds-brand:focus-visible{outline:2px solid var(--peach);outline-offset:3px;border-radius:8px} .ds-pill-light{background:var(--ink);color:#0c0807;text-decoration:none} .ds-pill-light:hover{background:#fff} .ds-pill-sm{height:38px;padding:0 16px;font-size:12px}"
+    },
+    {
+      "name": "Outcome Slabs",
+      "kind": "card",
+      "refersTo": "card-paper",
+      "description": "The call outcomes: rust-lit, paper and dark slabs with a serif title over Inter Tight body.",
+      "html": "<div class=\"ds-grid\"><article class=\"ds-slab ds-rust\"><h3>Table for 4, tonight at 8:30.</h3><p>Confirmed with code K7Q2.</p></article><article class=\"ds-slab ds-paper\"><h3>&ldquo;Nuts aren&rsquo;t listed.&rdquo;</h3><p>Answered from your menu data.</p></article><article class=\"ds-slab ds-dark\"><h3>&ldquo;Putting you through to the host.&rdquo;</h3><p>Transferred whenever a guest asks.</p></article></div>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;padding:24px;background:#000;font-family:var(--sans)} .ds-slab{min-height:260px;display:flex;flex-direction:column;justify-content:flex-end;padding:28px;border-radius:30px} .ds-slab h3{margin:0;font-family:var(--serif);font-weight:400;font-size:32px;line-height:1.02;letter-spacing:-.01em} .ds-slab p{margin:12px 0 0;font-size:15px;line-height:1.45} .ds-rust{background:radial-gradient(130% 120% at 0% 100%,#a8441a 0%,#6e2a10 34%,#2a120a 64%,#120806 100%);color:var(--ink)} .ds-rust p{color:#f8e2d6} .ds-paper{background:var(--paper);color:#0c0807} .ds-paper p{color:#3d3631} .ds-dark{background:#121010;color:var(--ink);box-shadow:inset 0 0 0 1px var(--hair);justify-content:center;text-align:center} .ds-dark p{color:var(--ink-2)}"
+    },
+    {
+      "name": "Booking Pass",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Wallet-style pass that assembles under the call; facts land in fixed slots and stay.",
+      "html": "<div class=\"ds-stage\"><div class=\"ds-pass\"><div class=\"ds-top\"><span class=\"ds-state\"><i></i>Confirmed</span><span>The Saffron Table</span></div><p class=\"ds-title\">Table for 4</p><div class=\"ds-facts\"><span><small>Day</small><b>Tonight</b></span><span><small>Time</small><b>8:30 PM</b></span><span><small>Name</small><b>Priya</b></span><span><small>Code</small><b class=\"ds-code\">K7Q2</b></span></div></div></div>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-stage{background:#000;padding:24px;max-width:380px} .ds-pass{padding:13px 16px 14px;border-radius:22px;background:radial-gradient(130% 140% at 0% 100%,#b4491a 0%,#6e2a10 46%,#2a120a 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);color:#fff;font-family:var(--sans)} .ds-top{display:flex;justify-content:space-between;font-size:11.5px;color:rgba(255,238,228,.8)} .ds-state{display:inline-flex;align-items:center;gap:6px;font-weight:600} .ds-state i{width:6px;height:6px;border-radius:50%;background:#7ee2a0;box-shadow:0 0 0 3px rgba(126,226,160,.2)} .ds-title{margin:5px 0 0;font-family:var(--serif);font-size:28px;line-height:1.05} .ds-facts{margin-top:10px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px} .ds-facts span{display:flex;flex-direction:column;gap:2px} .ds-facts small{font-size:10.5px;color:rgba(255,238,228,.66)} .ds-facts b{font-size:14.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap} .ds-code{letter-spacing:.08em}"
+    },
+    {
+      "name": "Facts Band",
+      "kind": "custom",
+      "refersTo": "facts-band",
+      "description": "Full-bleed band-orange marquee of the restaurant's real seed facts; pauses on hover.",
+      "html": "<div class=\"ds-band\"><ul class=\"ds-move\"><li>Paneer Tikka &middot; dairy</li><li>Open for lunch and dinner</li><li>Street parking nearby</li><li>Paneer Tikka &middot; dairy</li><li>Open for lunch and dinner</li><li>Street parking nearby</li></ul></div>",
+      "css": ":host{--ink:#f3efe9;--ink-2:rgba(243,239,233,.74);--ink-3:rgba(243,239,233,.58);--hair:rgba(243,239,233,.13);--peach:#f4c3a0;--paper:#ebe7e1;--ease:cubic-bezier(.16,1,.3,1);--serif:'Instrument Serif','Iowan Old Style','Times New Roman',serif;--sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif} .ds-band{overflow:hidden;background:#dc6224;color:#140905;font-family:var(--sans)} .ds-move{display:flex;width:max-content;margin:0;padding:0;list-style:none;animation:ds-band 30s linear infinite} .ds-band:hover .ds-move{animation-play-state:paused} .ds-move li{display:flex;align-items:center;height:46px;padding:0 22px;font-size:14.5px;font-weight:500;letter-spacing:-.01em;white-space:nowrap} .ds-move li::after{content:'';width:5px;height:5px;margin-left:44px;border-radius:50%;background:currentColor;opacity:.5} @keyframes ds-band{to{transform:translateX(-50%)}} @media (prefers-reduced-motion:reduce){.ds-move{animation:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Confirmation Card",
+    "overview": "Hostline's public world is a black stage under a rust evening glow. Everything on it follows one phone call to the thing it leaves behind: a booking with a code, an answer read from the restaurant's own menu, a hand-off, a message for the manager. Light comes from above and from the corners, never from flat colored panels; the page is almost entirely black, ink and rust light, with one paper card as the single bright surface.\n\nType carries the voice. A condensed high-contrast serif (Instrument Serif) speaks one loud line per section; a tight neo-grotesk (Inter Tight) does all the explaining, in muted warm ink. Actions are pills: white for the thing to do, black for the alternative. The assistant itself is a particle orb lit only by the density of its dots, cool at the crown and warm at the base, and it lives inside a drawn iPhone where the call actually happens. Motion is slow, eased and blur-softened: facts arrive and then stay.\n\nThis is the project's primary design system and covers the landing page, the live demo call and staff sign-in. The staff dashboard is a separate Operate surface with its own light iOS/Notion system (everything in `app/globals.css` above the orb section). The two worlds share only the rust-orange tint, the iPhone/orb call screen (the dashboard's test call renders the same component), the Hostline name and app icon. Do not import this world's black ground, serif or pills into the dashboard, or the dashboard's grouped lists and hairline tables into this one.",
+    "keyCharacteristics": [
+      "Pure black ground; rust arrives as radial light and corner-lit gradients that fade to black.",
+      "Instrument Serif display over Inter Tight body; only the drawn iPhone speaks in the iOS system face.",
+      "Pills only for actions: white primary, black secondary, an up-right arrow on the way out.",
+      "Large rounded slabs (30px) for outcomes: rust gradient, paper, dark.",
+      "A Three.js particle orb inside a clean iPhone as the product's face.",
+      "Fixed-width figures for every time, code and clock."
+    ],
+    "rules": [
+      {
+        "name": "The Light Source Rule",
+        "body": "Rust is light, not paint. It arrives as radial glows and corner-lit gradients that fall to black. The only flat orange fills are the facts band and the composer's send button.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Paper Rule",
+        "body": "A screen has at most one light surface (the paper slab). Everything else is black, near-black or rust-lit.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Loud Line Rule",
+        "body": "Each section gets one serif display or headline line. Serif titles beneath it are subordinate and never compete in size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Fixed Figures Rule",
+        "body": "Clocks, times, party sizes and codes use tabular figures so digits never shift as they change; codes add 0.08em tracking.",
+        "section": "typography"
+      },
+      {
+        "name": "The Inset Ring Rule",
+        "body": "Edges are 1px inset rings in hair or white at low alpha, never outer borders or drop shadows. A new surface that needs a drop shadow is either the phone or wrong.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep every public page on the black ground and light it with radial rust glows from the top or bottom, as on the hero (0.62 alpha), sign-in (0.5) and close (0.42).",
+      "Do give each section exactly one serif display or headline line and set everything else in Inter Tight at ink-2 or ink-3.",
+      "Do use a white pill for the main action and a black pill for the alternative, uppercase 13px, with the up-right arrow on outbound links.",
+      "Do draw edges as 1px inset rings in hair and keep drop shadows for the iPhone alone.",
+      "Do set times, codes and clocks in tabular figures.",
+      "Do show the assistant as the particle orb, inside the iPhone or bare on black, and keep the poster fallback with its provenance sidecar.",
+      "Do drop the iPhone frame on phones (640px and below) so the live call fills the screen.",
+      "Do keep the staff dashboard on its own light system, sharing only the rust tint, the call screen, the name and the app icon."
+    ],
+    "donts": [
+      "Don't fill pills, slabs or large panels with flat rust or orange; the facts band and the composer's small send button are the only flat orange fills.",
+      "Don't put more than one paper (light) slab on a screen.",
+      "Don't add a third face to the page's own text or set body copy in the serif; the iOS system face belongs to the iPhone screen only.",
+      "Don't draw the orb with outlines, glow sprites or a gradient disc; it is lit by dot density alone.",
+      "Don't bring the dashboard's grouped lists, segmented controls or iOS system face into the public pages, or this world's black ground and serif into the dashboard."
+    ]
+  }
+}

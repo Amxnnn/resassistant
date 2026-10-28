@@ -2,40 +2,41 @@
 version: 1
 slug: "app-page-tsx"
 primary_target: "app/page.tsx"
-related_targets: []
+related_targets: ["app/demo/page.tsx","app/login/page.tsx","app/_brand"]
 ---
 
 ## Scope
 
-Staff dashboard, `web/app/page.tsx` (one route, eight screens). Mode: Operate.
+Public site: the landing page `web/app/page.tsx`, with the live demo call (`app/demo/page.tsx`) and staff sign-in (`app/login/page.tsx`) in the same world. Mode: Persuade.
 
 ## Audience and job
 
-Host or manager on a laptop before and during dinner service, sometimes on a phone. Job: see tonight at a glance, take or cancel a booking, answer messages the receptionist took, keep the menu, hours and spoken answers correct. Demo viewers reach calls, latency and the test call one tap down.
+Restaurant owners and managers deciding whether an AI should answer their phone, and portfolio reviewers watching the project. In one viewport they must see that this answers a restaurant's calls and books real tables; then believe it only says what the restaurant's own data says; then act: call the demo from the browser.
 
 ## Constraints
 
-- Pinned by the user: minimal, professional, iOS and Notion inspired.
-- Real data only. Empty is shown as empty; no fallback numbers.
-- Times in the restaurant timezone (Asia/Kolkata). Plain CSS, lucide icons, no component library.
-- Keep the per-language seam on info answers without featuring the second language.
+- Pinned by the user (2026-10-28), from the Nisa reference: black ground, warm rust and orange glow, condensed high-contrast serif display, tight neo-grotesk body, pill buttons, rounded gradient cards. Minimal, clean, premium.
+- Pinned: the assistant is a futuristic 3D particle orb (reference: a dotted sphere shading cool at the crown to warm at the base) inside a clean iOS iPhone mockup. Three.js, GSAP where it helps. The orb moves as it speaks.
+- On phones the live demo drops the iPhone frame and the call fills the screen; tablet and desktop show the frame.
+- The staff dashboard keeps its light layout (its own brief); it shares the accent and the iPhone test call.
+- No invented customers, logos, metrics or prices. The Saffron Table and its guests are fake and labelled so; facts shown come from `db/seed-data.json`.
 
 ## Direction contract
 
-THESIS: The dashboard reads like the restaurant's own phone: tonight's guests, calls and messages laid out as Recents and Voicemail inside a quiet Notion workspace. It refuses the admin-template arrangement of KPI cards over a chart over a table.
+THESIS: Every call ends in something the restaurant can keep: a booking with a code, an answer from its own menu, a message for the manager. The page follows one call to that card. It refuses the AI-agent template of a floating orb over a use-case grid and a logo wall.
 
-OWN-WORLD: White page, near-white sidebar, inset grouped lists with 1px hairline separators, one system-grade sans with tabular figures, a single saffron tint reserved for now/next and the primary action. Status reads as small coloured dots and words, never filled badges. Detail opens in a sheet; filters are segmented controls; toggles are iOS switches.
+OWN-WORLD: Black ground under a rust evening glow. Instrument Serif display over Inter Tight. White and black pills with an arrow. Outcome cards in rust-to-black gradients, one paper card, one dark card. A particle orb lit by dot density alone, cool crown to warm base, living inside a clean iPhone. Fixed-width figures; one loud serif line per section.
 
-STORY: The host opens it and knows, in one glance, how many guests are coming tonight, who is next, which tables are free when, and what needs them. They act from the same row, and trust that every number came from a real booking or call.
+STORY: An owner watches the phone take a call while the booking card assembles fact by fact, sees what else a call can end in, sees the dense band of facts it is allowed to say, and calls it from the browser.
 
-FIRST VIEWPORT: Left sidebar (restaurant, grouped navigation, restaurant-local clock). Large title "Tonight" with one summary line: bookings, covers, next arrival. Primary "New booking" at the title's right. Full-width tables-by-time strip with a saffron now-line and bookings drawn to their real seating length. Below, tonight's bookings as an inset list on the left, "Needs you" (new messages) on the right.
+FIRST VIEWPORT: Floating nav: orb mark and Hostline left; Staff sign in and a white "Try the demo" pill right. Centred two-line serif headline at about 6vw, lede, white "Talk to it now" and dark "Open the dashboard" pills. The iPhone rises from the bottom edge, centred, mid-call: The Saffron Table, timer, orb speaking, captions; the booking card assembles just below the fold.
 
-FORM: The Front-Desk Phone, candidate 5 of 7 on my ordered list (iOS Phone app grammar: Recents, Voicemail, detail sheets), seed key a89b27d6. Raises: duration drawn to scale (labanotation); accent only for now/next (terminal wayfinding); one face and hairlines only (design annual); tabular figures everywhere (datamatics); detail beside the list (streaming wall); per-turn latency right-aligned like track times (j-card).
+FORM: The Confirmation Card, candidate 7 of 7 on my ordered list, seed key 17893ed2. Raises: each confirmed fact stays (Coiled Earth Tower); one call followed end to end (Rain-Night Cityscape); orb lit by density alone (ASCII Live Render); fixed-width figures that cross-fade (Nixie Laboratory Counter); one loud fragment per section (Raygun Layout Desk); a bare orb against one dense band of real facts (Shibuya Boutique Sleeve).
 
-Signature interaction: the detail sheet. Any booking, message or call row opens a sheet that slides in on the iOS sheet curve while the list stays in place; on a phone it rises from the bottom.
+Signature interaction: on desktop the phone rises and pins as you scroll, the call advances step by step (picks up, listens, checks, confirms) and the booking card assembles fact by fact. The orb follows the voice: the live audio level on the demo, a speech envelope on the landing.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
 ## Unresolved
 
-- The test call is a scripted simulation; its timings are illustrative and labelled as such.
+- The live demo needs the agent worker running; the landing page's call is a scripted sample and is labelled as one.
