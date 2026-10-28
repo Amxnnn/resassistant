@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import seed from "@/db/seed-data.json";
-import { BRAND } from "./brand";
-import { Mark } from "./site-nav";
 import { RaceFigure } from "./race";
 import { WakeOrb } from "./wake-orb";
+import { BentoMotion } from "./bento-motion";
 
 const OUTCOMES = [
   {
@@ -31,8 +30,8 @@ const OUTCOMES = [
 
 export function Outcomes() {
   return (
-    <section className="outcomes" aria-labelledby="outcomes-title">
-      <div className="wrap outcomes-grid">
+    <section id="outcomes" className="outcomes" aria-labelledby="outcomes-title">
+      <BentoMotion className="wrap outcomes-grid">
         <h2 id="outcomes-title" className="display-2 outcomes-statement">
           Every call ends in something you can keep.
         </h2>
@@ -44,6 +43,7 @@ export function Outcomes() {
                   <span className="outcome-rings" aria-hidden="true">
                     <i />
                     <i />
+                    <i className="ripple" />
                   </span>
                   <h3 className="outcome-title">{o.title}</h3>
                 </div>
@@ -54,7 +54,7 @@ export function Outcomes() {
             </div>
           </article>
         ))}
-      </div>
+      </BentoMotion>
     </section>
   );
 }
@@ -76,7 +76,7 @@ const RULES = [
 
 export function Rules() {
   return (
-    <section className="rules" aria-labelledby="rules-title">
+    <section id="rules" className="rules" aria-labelledby="rules-title">
       <div className="wrap rules-grid">
         <RaceFigure />
         <div className="rules-copy">
@@ -143,7 +143,7 @@ function BandRow({ facts, reverse, seconds }: { facts: string[]; reverse?: boole
 
 export function Close() {
   return (
-    <section className="close" aria-labelledby="close-title">
+    <section id="hear" className="close" aria-labelledby="close-title">
       <WakeOrb>
         <h2 id="close-title" className="display-1 close-title">
           Hear it for yourself.
@@ -165,24 +165,5 @@ export function Close() {
         <BandRow facts={infoFacts()} seconds={140} reverse />
       </div>
     </section>
-  );
-}
-
-export function SiteFooter() {
-  return (
-    <footer className="site-footer">
-      <div className="wrap site-footer-inner">
-        <span className="site-footer-brand">
-          <Mark size={18} />
-          {BRAND.name}
-          <span className="site-footer-tag">{BRAND.tagline}</span>
-        </span>
-        <nav aria-label="Footer" className="site-footer-links">
-          <Link href="/demo">Demo call</Link>
-          <Link href="/login">Staff sign in</Link>
-        </nav>
-      </div>
-      <p className="wrap site-footer-note">The Saffron Table, its menu and every guest on this site are made up.</p>
-    </footer>
   );
 }

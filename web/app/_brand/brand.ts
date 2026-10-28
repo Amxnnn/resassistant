@@ -1,8 +1,8 @@
 // Product brand. Change the name here and it changes everywhere.
 export const BRAND = {
-  name: "Hostline",
+  name: "Resassistant",
   tagline: "The AI receptionist for restaurants",
-  sessionCookie: "hostline_session"
+  sessionCookie: "resassistant_session"
 };
 
 export function signOut() {

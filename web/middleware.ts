@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { BRAND } from "./app/_brand/brand";
 
 // Dummy session gate: the login page sets this cookie. Replace with Supabase auth later.
-const SESSION_COOKIE = "hostline_session";
+const SESSION_COOKIE = BRAND.sessionCookie;
 
 export function middleware(request: NextRequest) {
   const signedIn = Boolean(request.cookies.get(SESSION_COOKIE)?.value);

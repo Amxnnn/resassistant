@@ -115,7 +115,7 @@ export function HeroStory() {
           <figcaption>A scripted sample call. The restaurant and the guest are made up.</figcaption>
         </figure>
 
-        <div className="story-steps">
+        <div id="how" className="story-steps">
           <h2 className="display-2 story-heading">How a call goes</h2>
           <ol className="story-rail" aria-hidden="true">
             {STEPS.map((s, i) => (

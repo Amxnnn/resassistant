@@ -3,7 +3,8 @@ import { BRAND } from "./_brand/brand";
 import { siteFonts } from "./_brand/fonts";
 import { SiteNav } from "./_brand/site-nav";
 import { HeroStory } from "./_brand/hero-story";
-import { Close, Outcomes, Rules, SiteFooter } from "./_brand/landing";
+import { Close, Outcomes, Rules } from "./_brand/landing";
+import { SiteFooter } from "./_brand/site-footer";
 
 export const metadata: Metadata = {
   title: `${BRAND.name} · ${BRAND.tagline}`,

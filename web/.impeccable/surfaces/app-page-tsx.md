@@ -29,7 +29,7 @@ OWN-WORLD: Black ground under a rust evening glow. Instrument Serif display over
 
 STORY: An owner watches the phone take a call while the booking card assembles fact by fact, sees what else a call can end in, sees the dense band of facts it is allowed to say, and calls it from the browser.
 
-FIRST VIEWPORT: Floating nav: orb mark and Hostline left; Staff sign in and a white "Try the demo" pill right. Centred two-line serif headline at about 6vw, lede, white "Talk to it now" and dark "Open the dashboard" pills. The iPhone rises from the bottom edge, centred, mid-call: The Saffron Table, timer, orb speaking, captions; the booking card assembles just below the fold.
+FIRST VIEWPORT: Floating nav: orb mark and Resassistant left; Staff sign in and a white "Try the demo" pill right. Centred two-line serif headline at about 6vw, lede, white "Talk to it now" and dark "Open the dashboard" pills. The iPhone rises from the bottom edge, centred, mid-call: The Saffron Table, timer, orb speaking, captions; the booking card assembles just below the fold.
 
 FORM: The Confirmation Card, candidate 7 of 7 on my ordered list, seed key 17893ed2. Raises: each confirmed fact stays (Coiled Earth Tower); one call followed end to end (Rain-Night Cityscape); orb lit by density alone (ASCII Live Render); fixed-width figures that cross-fade (Nixie Laboratory Counter); one loud fragment per section (Raygun Layout Desk); a bare orb against one dense band of real facts (Shibuya Boutique Sleeve).
 

@@ -1,5 +1,5 @@
 ---
-name: Hostline
+name: Resassistant
 description: The AI receptionist for restaurants. A black stage lit by a rust evening glow, where one call ends in something the restaurant can keep.
 colors:
   rust-500: "#b4491a"
@@ -148,17 +148,17 @@ components:
     padding: "0 22px"
 ---
 
-# Design System: Hostline
+# Design System: Resassistant
 
 ## Overview
 
 **Creative North Star: "The Confirmation Card"**
 
-Hostline's public world is a black stage under a rust evening glow. Everything on it follows one phone call to the thing it leaves behind: a booking with a code, an answer read from the restaurant's own menu, a hand-off, a message for the manager. Light comes from above and from the corners, never from flat colored panels; the page is almost entirely black, ink and rust light, with one paper card as the single bright surface.
+Resassistant's public world is a black stage under a rust evening glow. Everything on it follows one phone call to the thing it leaves behind: a booking with a code, an answer read from the restaurant's own menu, a hand-off, a message for the manager. Light comes from above and from the corners, never from flat colored panels; the page is almost entirely black, ink and rust light, with one paper card as the single bright surface.
 
 Type carries the voice. A condensed high-contrast serif (Instrument Serif) speaks one loud line per section; a tight neo-grotesk (Inter Tight) does all the explaining, in muted warm ink. Actions are pills: white for the thing to do, black for the alternative. The assistant itself is a particle orb lit only by the density of its dots, cool at the crown and warm at the base, and it lives inside a drawn iPhone where the call actually happens. Motion is slow, eased and blur-softened: facts arrive and then stay.
 
-This is the project's primary design system and covers the landing page, the live demo call and staff sign-in. The staff dashboard is a separate Operate surface with its own light iOS/Notion system (everything in `app/globals.css` above the orb section). The two worlds share only the rust-orange tint, the iPhone/orb call screen (the dashboard's test call renders the same component), the Hostline name and app icon. Do not import this world's black ground, serif or pills into the dashboard, or the dashboard's grouped lists and hairline tables into this one.
+This is the project's primary design system and covers the landing page, the live demo call and staff sign-in. The staff dashboard is a separate Operate surface with its own light iOS/Notion system (everything in `app/globals.css` above the orb section). The two worlds share only the rust-orange tint, the iPhone/orb call screen (the dashboard's test call renders the same component), the Resassistant name and app icon. Do not import this world's black ground, serif or pills into the dashboard, or the dashboard's grouped lists and hairline tables into this one.
 
 **Key Characteristics:**
 - Pure black ground; rust arrives as radial light and corner-lit gradients that fade to black.
@@ -286,7 +286,7 @@ Quiet, confident pills that point outward.
 - **Inline action:** a "Show" peek button sits inside the field's right edge (36px, 10px radius).
 
 ### Navigation
-Floating, barless: orb mark and "Hostline" (17px, 600) left; "Staff sign in" (14px ink-2, ink on hover) and a small white "Try the demo" pill right. At 640px and below the text link hides and only the pill remains. Each page drops the link to itself.
+Floating, barless: orb mark and "Resassistant" (17px, 600) left; "Staff sign in" (14px ink-2, ink on hover) and a small white "Try the demo" pill right. At 640px and below the text link hides and only the pill remains. Each page drops the link to itself.
 
 ### The Orb (signature)
 A Three.js point sphere of bricked latitude rows (about 3.5px between dots at any size) with additive blending, coloured by height from amber at the base through ember and rose to iris at the crown, lit only by dot density. Four states (idle, listening, thinking, speaking) tween with GSAP (power3.out, 0.7s; 0.9s into thinking). Thinking twists bands around the axis; speaking runs a ripple up from the base, driven by the live voice level on the demo and a syllable envelope on the landing; a few warm-base particles lift off the rim. It draws only on screen and in a visible tab, follows a fine pointer, and slows to 15% with reduced motion. Before WebGL is ready (or without it), a rendered poster frame (`_brand/orb-poster.webp`) shows with screen blending, and the canvas fades in over 900ms. On the close, the orb leans in to listen while its call pill is hovered or focused.

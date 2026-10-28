@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { siteFonts } from "./_brand/fonts";
 import "./globals.css";
 
 // Inter stands in for SF Pro where the Apple system face is not installed.
@@ -14,10 +15,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#111113" }
-  ]
+  themeColor: "#000000"
 };
 
 export default function RootLayout({
@@ -26,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${siteFonts}`}>
       <body>{children}</body>
     </html>
   );

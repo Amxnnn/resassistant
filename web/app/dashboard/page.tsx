@@ -16,6 +16,7 @@ import { TestCall } from "../_dashboard/test-call";
 import { useLiveCall } from "../_brand/use-live-call";
 import { BRAND, signOut } from "../_brand/brand";
 import { Insights } from "../_dashboard/insights";
+import { useDashboardMotion } from "../_dashboard/motion";
 import {
   BookingSheet,
   CallSheet,
@@ -66,6 +67,9 @@ export default function DashboardPage() {
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: "ok" | "error"; id: number } | null>(null);
+
+  const appRef = useRef<HTMLDivElement>(null);
+  useDashboardMotion(appRef, tab);
 
   // The agent saves the call log when the call closes; give it a moment, then refresh Calls.
   const testCall = useLiveCall({ callerName: "Staff test call", onEnded: () => setTimeout(() => load(true), 4000) });
@@ -501,10 +505,11 @@ export default function DashboardPage() {
   const moreActive = !NAV.find(n => n.id === tab)?.inTabBar;
 
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <aside className="sidebar" aria-label="Sections">
         {workspace}
         <nav>
+          <span className="nav-selection" aria-hidden="true" />
           {groups.map(group => (
             <div key={group} className="nav-group">
               <div className="nav-group-label">{group}</div>
