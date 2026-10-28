@@ -12,6 +12,7 @@ from agent.speakable import (
     speak_phone,
     speak_time,
     spell_code,
+    spoken_digits,
 )
 
 
@@ -27,6 +28,25 @@ from agent.speakable import (
 )
 def test_normalize_phone_assumes_india_without_a_country_code(raw, expected):
     assert normalize_phone(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("said", "digits"),
+    [
+        ("Nine one seven three zero zero eight six zero three.", "9173008603"),
+        ("One, two, three, four, five, six, seven, eight, nine.", "123456789"),
+        ("nine eight seven double five triple four two one", "9875544421"),
+        ("Oh, it's 98765 oh 4321.", "9876504321"),  # a leading "oh" is a sound, not a zero
+        ("Sure. For four people.", "4"),
+    ],
+)
+def test_numbers_read_out_as_words_become_digits(said, digits):
+    """Speech-to-text writes a number read digit by digit as words, as in the demo calls."""
+    assert spoken_digits(said) == digits
+
+
+def test_a_number_said_as_words_is_still_a_phone_number():
+    assert normalize_phone("nine eight seven six five four three two one zero") == "+919876543210"
 
 
 def test_phone_numbers_are_spaced_so_tts_reads_single_digits():

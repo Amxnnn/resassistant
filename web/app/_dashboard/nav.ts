@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarDays, ChartColumn, Clock, Mic, Phone, Utensils, Voicemail } from "lucide-react";
+import { CalendarClock, CalendarDays, ChartColumn, Clock, Phone, Utensils, Voicemail } from "lucide-react";
 import type { Tab } from "./types";
 
 export const NAV: {
@@ -15,7 +15,6 @@ export const NAV: {
   { id: "menu", label: "Menu", short: "Menu", icon: Utensils, group: "Restaurant", inTabBar: false },
   { id: "hours", label: "Hours & info", short: "Hours", icon: Clock, group: "Restaurant", inTabBar: false },
   { id: "calls", label: "Calls", short: "Calls", icon: Phone, group: "Receptionist", inTabBar: true },
-  { id: "test-call", label: "Test call", short: "Test call", icon: Mic, group: "Receptionist", inTabBar: false },
   { id: "insights", label: "Insights", short: "Insights", icon: ChartColumn, group: "Receptionist", inTabBar: false }
 ];
 

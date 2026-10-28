@@ -98,7 +98,7 @@ export type DashboardData = {
   messages: Message[];
 };
 
-export type Tab = "tonight" | "reservations" | "messages" | "calls" | "menu" | "hours" | "test-call" | "insights";
+export type Tab = "tonight" | "reservations" | "messages" | "calls" | "menu" | "hours" | "insights";
 
 export type SheetState =
   | { kind: "booking"; id: string }

@@ -1,4 +1,5 @@
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 from livekit.agents import StopResponse, ToolResult
@@ -7,6 +8,7 @@ from livekit.agents.llm import ChatContext
 from agent.api_client.sample import RESTAURANT_ID
 from agent.tools import (
     ANYTHING_ELSE,
+    ASK,
     ASK_WHICH_DAY,
     DAY_TOO_FAR,
     NOT_CONFIRMED_YET,
@@ -14,6 +16,7 @@ from agent.tools import (
     NOTHING_TO_CHANGE,
     READ_BACK,
     Receptionist,
+    closes_the_call,
     real_name,
     resolve_day,
 )
@@ -71,11 +74,100 @@ async def test_a_stand_in_name_is_never_booked(agent, make_state, stand_in):
     assert state.pending is None
 
 
+def heard(ctx, *lines: tuple[str, str]):
+    """Give the stand-in RunContext a session history: (role, text) pairs, oldest first."""
+    history = ChatContext()
+    for role, text in lines:
+        history.add_message(role=role, content=text)
+    ctx.session.history = history
+    return ctx
+
+
+async def test_each_missing_detail_is_asked_for_once_and_details_given_are_kept(agent, make_state):
+    """The LLM passes only what's new; nothing the caller already said is asked for again."""
+    state = make_state()
+    said = []
+    for speech_id, kwargs in enumerate(
+        [
+            {},
+            {"party_size": 4},
+            {"day": "Tuesday"},
+            {"time": "19:30"},
+            {"guest_name": "Asha"},
+            {"phone_number": "98765 43210"},
+        ]
+    ):
+        ctx = turn(state, f"s{speech_id}")
+        spoke(await agent.prepare_booking(ctx, **kwargs))
+        said += ctx.session.said
+    assert said[:4] == [
+        "How many people will it be for?",
+        "What day and time would you like?",
+        "What time would you like on Tuesday?",
+        "Good news, we have a table for 4 on Tuesday at 7:30 PM. What name should I put the booking under?",
+    ]
+    assert said[4] == "Thanks, Asha. What's the best phone number for the booking?"
+    assert "a table for 4 under Asha, Tuesday the 27th at 7:30 PM, and your number is 9 8 7 6 5" in said[5]
+    assert state.pending is not None and state.pending.request.guest_name == "Asha"
+
+
+async def test_the_name_is_not_asked_again_when_the_llm_leaves_it_out(agent, make_state):
+    """Demo call: the caller gave their name, then their number, and was asked for the name again."""
+    state = make_state()
+    await agent.prepare_booking(turn(state, "s1"), 4, "today", "20:00", guest_name="Aman")
+    ctx = turn(state, "s2")
+    await agent.prepare_booking(ctx, 4, "today", "20:00", phone_number="98765 43210")
+    assert "under Aman" in ctx.session.said[0] and ctx.session.said[0].endswith("Shall I book it?")
+
+
+async def test_a_short_phone_number_is_read_back_to_the_caller_not_asked_for_again(agent, make_state):
+    """Demo call: a 9-digit number got "What's the best phone number?" again and again, word for word."""
+    state = make_state()
+    await agent.prepare_booking(turn(state, "s1"), 8, "tomorrow", "19:30", guest_name="Riya")
+    ctx = turn(state, "s2")
+    spoke(await agent.prepare_booking(ctx, phone_number="123456789"))
+    assert ctx.session.said == [
+        "Sorry, I only caught 9 digits: 1 2 3, 4 5 6, 7 8 9. Could you say the whole number again?"
+    ]
+    assert state.pending is None
+
+
+async def test_the_number_the_caller_just_said_is_used_when_the_llm_drops_it(agent, make_state):
+    state = make_state()
+    first = turn(state, "s1")
+    await agent.prepare_booking(first, 2, "today", "20:00", guest_name="Aman")
+    asked = first.session.said[0]
+    ctx = heard(
+        turn(state, "s2"),
+        ("assistant", asked),
+        ("user", "Nine one seven three zero zero eight six zero three."),
+    )
+    await agent.prepare_booking(ctx, 2, "today", "20:00")
+    assert "your number is 9 1 7 3 0, 0 8 6 0 3. Shall I book it?" in ctx.session.said[0]
+
+
+async def test_asking_again_for_a_detail_uses_other_words(agent, make_state):
+    state = make_state()
+    first = turn(state, "s1")
+    await agent.prepare_booking(first, 2, "today", "20:00")
+    ctx = heard(turn(state, "s2"), ("assistant", first.session.said[0]), ("user", "Uh, it's, um."))
+    await agent.prepare_booking(ctx, 2, "today", "20:00")
+    assert ctx.session.said == [ASK["name"][1]]
+
+
+async def test_a_party_over_the_phone_limit_goes_to_a_message_before_asking_anything_else(agent, make_state):
+    ctx = turn(make_state(), "s1")
+    reply = await agent.prepare_booking(ctx, party_size=12)
+    assert "more than 8 guests" in reply and "take a" in reply
+    assert ctx.session.said == []
+
+
 def test_real_names_pass_through_tidied():
     assert real_name("  Asha   Rao ") == "Asha Rao"
     assert real_name("Mr Sharma") == "Mr Sharma"
     assert real_name("आशा") == "आशा"
     assert real_name("Mr.") is None
+    assert real_name("[name omitted]") is None and real_name("<name>") is None
 
 
 async def test_booking_is_read_back_and_only_saved_after_a_later_yes(agent, make_state, api):
@@ -216,6 +308,107 @@ async def test_end_call_refuses_to_hang_up_on_a_caller_who_is_still_talking(agen
         assert await agent.end_call(ctx) == NOT_DONE_YET
         assert ctx.session.said == []
     assert ended == []
+
+
+async def test_a_plain_no_to_anything_else_ends_the_call(agent, make_state):
+    state = make_state()
+    ended = []
+    state.end_call = ended.append
+    ctx = with_caller_saying(turn(state, "s9"), "No.")  # the agent's last line asked "Anything else...?"
+    spoke(await agent.end_call(ctx))
+    assert len(ended) == 1
+
+
+async def test_a_plain_no_to_anything_but_anything_else_does_not(agent, make_state):
+    state = make_state()
+    ended = []
+    state.end_call = ended.append
+    ctx = turn(state, "s9")
+    history = ChatContext()
+    history.add_message(role="assistant", content="Table for 4, tonight at 8 PM. Shall I book it?")
+    history.add_message(role="user", content="No.")
+    ctx.session.history = history
+    assert await agent.end_call(ctx) == NOT_DONE_YET
+    assert ended == []
+
+
+async def test_a_newer_tool_line_cancels_one_still_queued(agent, make_state):
+    """When the caller adds to a turn, the first reply's tool line mustn't play as well as the second's."""
+
+    class Queued:
+        def __init__(self) -> None:
+            self.interrupted = False
+
+        def done(self) -> bool:
+            return False
+
+        def interrupt(self, *, force: bool = False):
+            self.interrupted = True
+            return self
+
+    state = make_state()
+    first = Queued()
+    state.tool_speech = first  # type: ignore[assignment]
+    ctx = turn(state, "s2")
+    with patch("agent.tools.SpeechHandle", Queued):
+        await agent.take_message(ctx, "Aman", "callback", "Call back about Friday", "+14155550111")
+    assert first.interrupted
+    assert len(ctx.session.said) == 1
+
+
+async def test_the_booking_code_is_said_even_when_a_doubled_yes_cut_into_the_reply(agent, make_state):
+    """Demo call: "Yes." "Yes." interrupted the reply while it booked, and the code was never said."""
+    state = make_state()
+    await agent.prepare_booking(turn(state, "s1"), 4, "today", "20:00", "Aman", "98765 43210")
+    yes = turn(state, "s2")
+    yes.speech_handle.interrupted = True
+    await agent.confirm_action(yes)
+    [(line, kwargs)] = yes.session.calls
+    assert line.startswith("You're all set! Your booking code is ")
+    assert kwargs == {"allow_interruptions": False}
+
+    again = await agent.confirm_action(turn(state, "s3"))  # the second "Yes."
+    assert "already went through" in again and "You're all set!" in again
+    assert state.outcomes == ["booked"]
+
+
+@pytest.mark.parametrize(
+    ("agent_line", "caller", "closes"),
+    [
+        ("Is there anything else I can help you with?", "No.", True),
+        ("Anything else?", "no thank you", True),
+        ("Anything else I can help with?", "Nope, that's it. Thanks so much!", True),
+        ("Anything else?", "all done bye", True),
+        ("What name should I put the booking under?", "Okay, bye!", True),
+        ("Anything else?", "No thanks, and is there parking?", False),
+        ("Anything else?", "Yeah.", False),
+        ("Anything else?", "Okay.", False),
+        ("Table for 4, tonight at 8 PM. Shall I book it?", "No.", False),
+        ("Your code is K, 7, Q, 2.", "Thanks.", False),
+        ("Anything else?", "", False),
+    ],
+)
+def test_a_turn_that_only_says_goodbye_is_told_apart(agent_line, caller, closes):
+    assert closes_the_call(caller, agent_line) is closes
+
+
+async def test_a_plain_goodbye_goes_straight_to_end_call_without_the_llm(agent, monkeypatch):
+    """Demo call: after "No." to "anything else?" the LLM said its own goodbye and the line stayed open."""
+    from livekit.agents import Agent
+
+    async def no_llm(*args, **kwargs):
+        raise AssertionError("the LLM shouldn't be asked")
+        yield
+
+    monkeypatch.setattr(Agent.default, "llm_node", no_llm)
+    history = ChatContext()
+    history.add_message(
+        role="assistant", content="You're all set! Is there anything else I can help you with?"
+    )
+    history.add_message(role="user", content="No.")
+    chunks = [c async for c in agent.llm_node(history, agent.tools, None)]
+    [call] = chunks[0].delta.tool_calls
+    assert call.name == "end_call" and call.arguments == "{}"
 
 
 async def test_a_line_the_caller_cut_into_is_not_said(agent, make_state):

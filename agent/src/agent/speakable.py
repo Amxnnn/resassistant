@@ -46,9 +46,42 @@ def join_or(items: list[str]) -> str:
     return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} or {items[-1]}"
 
 
+_DIGIT_WORDS = {
+    "zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+}  # fmt: skip
+_REPEATS = {"double": 2, "triple": 3}
+
+
+def spoken_digits(text: str) -> str:
+    """The digits of a number however it arrived: "98765 43210", "nine eight seven", "double five".
+
+    Speech-to-text often writes a number read out digit by digit as words, and the LLM doesn't always
+    turn them into digits before passing them on.
+    """
+    digits: list[str] = []
+    repeat = 1
+    for token in re.findall(r"\d+|[a-z]+", text.lower()):
+        if token in _REPEATS:
+            repeat = _REPEATS[token]
+            continue
+        found = token if token.isdigit() else _DIGIT_WORDS.get(token)
+        if found is None or (token in ("oh", "o") and not digits):  # "Oh, it's..." isn't a zero
+            repeat = 1
+            continue
+        digits.append(found[0] * repeat + found[1:])
+        repeat = 1
+    return "".join(digits)
+
+
+def speak_digits(digits: str) -> str:
+    """Digits in groups of three for a voice to read one by one: 1 2 3, 4 5 6, 7 8 9."""
+    return ", ".join(" ".join(digits[i : i + 3]) for i in range(0, len(digits), 3))
+
+
 def normalize_phone(raw: str, default_country_code: str = "91") -> str | None:
     """A spoken or typed number as E.164, assuming India when no country code is given."""
-    digits = re.sub(r"\D", "", raw)
+    digits = spoken_digits(raw)
     if raw.strip().startswith("+"):
         return f"+{digits}" if 8 <= len(digits) <= 15 else None
     if len(digits) == 10:

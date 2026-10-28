@@ -22,10 +22,14 @@ TAKING_DIGITS = EndpointingOptions(min_delay=1.0, max_delay=4.0)
 
 _ASKS_FOR_NUMBER = re.compile(r"\b(phone )?number\b", re.IGNORECASE)
 _HAS_DIGITS = re.compile(r"\d(?:\D?\d){4}")  # a read-back already holds the number
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 def asks_for_a_number(agent_text: str) -> bool:
-    return bool(_ASKS_FOR_NUMBER.search(agent_text)) and not _HAS_DIGITS.search(agent_text)
+    # The last sentence is the question. "I only caught 1 2 3, 4 5 6. Could you say the whole number
+    # again?" asks for one; "...your number is 9 8 7 6 5, 4 3 2 1 0. Shall I book it?" doesn't.
+    question = _SENTENCE_END.split(agent_text.strip())[-1]
+    return bool(_ASKS_FOR_NUMBER.search(question)) and not _HAS_DIGITS.search(question)
 
 
 class TurnTaking:

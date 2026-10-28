@@ -62,7 +62,7 @@ export function Calls({
 
   return (
     <div className="page">
-      <PageHead title="Calls" sub="Every call the receptionist took, with the transcript and how fast it answered on each turn." />
+      <PageHead title="Calls" sub="Sample calls showing how the log reads: each transcript, and how fast the receptionist answered on every turn." />
 
       <div className="toolbar">
         <Segmented<Filter>
@@ -156,10 +156,10 @@ export function LatencyBar({ latency, scale }: { latency: Latency; scale: number
 export function LatencyLegend() {
   return (
     <div className="latency-legend">
-      <span><i className="seg-eou" /> End of turn</span>
+      <span><i className="seg-eou" /> Turn detection</span>
       <span><i className="seg-stt" /> Speech to text</span>
       <span><i className="seg-llm" /> Model first token</span>
-      <span><i className="seg-tts" /> First audio</span>
+      <span><i className="seg-tts" /> Voice first audio</span>
       <span><i style={{ width: 2, height: 10, background: "var(--label-2)" }} /> {LATENCY_BUDGET_MS} ms budget</span>
     </div>
   );

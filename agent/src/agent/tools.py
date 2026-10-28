@@ -9,6 +9,11 @@ Lines that must be exact (read-backs, booking codes) or need no thought (asking 
 detail, goodbye) are spoken by the tool itself, and the turn ends there. That skips the LLM's
 follow-up request: about a second sooner for the caller, and a request's worth of the free tier's
 tokens saved.
+
+A booking is built up in CallState.draft, one detail per turn. The LLM passes only what's new;
+prepare_booking asks for the next missing detail itself, and says what went wrong when a detail
+doesn't take (a phone number with digits missing), so the caller is never asked the same thing
+twice in the same words.
 """
 
 from __future__ import annotations
@@ -44,10 +49,12 @@ from agent.speakable import (
     normalize_phone,
     on_day,
     speak_day,
+    speak_digits,
     speak_in_phrases,
     speak_phone,
     speak_time,
     spell_code,
+    spoken_digits,
 )
 
 Topic = Literal["hours", "location", "parking", "delivery", "specials", "policies"]
@@ -75,6 +82,31 @@ ANYTHING_ELSE = ("Anything else I can help with?", "Is there anything else I can
 NOT_CONFIRMED_YET = "The caller hasn't confirmed yet. Read it back and wait for a clear yes."
 NOT_DONE_YET = "The caller hasn't said goodbye, so don't hang up. Ask if there's anything else."
 NOTHING_TO_CHANGE = "That's how the booking already is. Ask what they'd like to change."
+ALREADY_DONE = (
+    "Nothing is waiting for a yes: the last one already went through, and the caller was told: {line} "
+    "If they missed it, repeat it. A new booking, change or cancellation needs preparing first."
+)
+TOO_MANY_FOR_THE_PHONE = (
+    "That's more than {limit} guests, which the manager books personally. Say so, and offer to take a "
+    "message with their name, number, day and time."
+)
+
+# What prepare_booking says to get each missing detail: the first time, then when the caller's
+# answer didn't give it (said differently, so it doesn't sound like a stuck recording).
+ASK = {
+    "party_size": ("How many people will it be for?", "Sorry, how many people will it be?"),
+    "day_and_time": ("What day and time would you like?", "Sorry, which day and what time would you like?"),
+    "day": ("Which day would you like to come?", "Sorry, which day was that?"),
+    "time": ("What time would you like {day}?", "Sorry, what time would you like {day}?"),
+    "name": (
+        "What name should I put the booking under?",
+        "Sorry, I didn't catch the name. What should I put the booking under?",
+    ),
+    "phone": (
+        "What's the best phone number for the booking?",
+        "Sorry, I didn't catch a number. Could you say it digit by digit?",
+    ),
+}
 
 # A caller winding the call up. end_call is refused unless their last words match this: hanging up
 # on someone mid-conversation is far worse than staying on, and the silence timer in
@@ -86,11 +118,40 @@ _GOODBYE = re.compile(
     re.IGNORECASE,
 )
 
+# A plain "no" is also a goodbye, but only as the answer to "anything else?": to "Shall I book it?"
+# it means something else entirely.
+_NOTHING_ELSE = re.compile(
+    r"^\W*(no|nope|nah|nothing|not really|no,? (that'?s|i'?m) (it|all|good|fine))\W*$", re.IGNORECASE
+)
+_ANYTHING_ELSE = re.compile(r"\b(anything|something) (else|more)\b|\belse (i|we) can\b", re.IGNORECASE)
+_FAREWELL = re.compile(
+    r"\b(bye|goodbye|good night|see (you|ya)|take care|cheers|have a (good|nice|great|lovely|wonderful))\b",
+    re.IGNORECASE,
+)
+
+# Every word of a turn that does nothing but wind the call up. A turn made only of these, with a
+# goodbye in it or answering "anything else?", ends the call without asking the LLM (Receptionist.
+# llm_node): the LLM sometimes said its own goodbye instead of calling end_call, and the call then
+# sat open until the silence timer. One word outside the list ("No thanks, and is there parking?")
+# and the LLM decides as usual.
+_CLOSING_WORDS = {
+    "no", "nope", "nah", "nothing", "not", "really", "else", "more", "that's", "thats", "that", "that'll",
+    "thatll", "is", "it", "all", "everything", "i'm", "im", "i", "am", "we're", "we", "good", "fine",
+    "done", "set", "great", "okay", "ok", "alright", "right", "perfect", "cool", "awesome", "lovely",
+    "wonderful", "nice", "thanks", "thank", "you", "so", "much", "very", "a", "lot", "bye", "goodbye",
+    "see", "ya", "take", "care", "have", "day", "night", "evening", "cheers", "will", "be", "for", "now",
+    "yeah", "yep", "sure", "oh", "um", "uh", "well", "then", "just", "appreciate", "you've", "been",
+    "helpful", "sir", "madam", "ma'am",
+}  # fmt: skip
+
 # What an LLM writes as guest_name when the caller hasn't given one.
 _NOT_A_NAME = {
     "", "guest", "caller", "the caller", "customer", "client", "user", "unknown", "anonymous", "none",
-    "n a", "na", "name", "not given", "not provided", "sir", "madam", "mr", "mrs", "ms",
+    "n a", "na", "name", "not given", "not provided", "name omitted", "omitted", "sir", "madam", "mr",
+    "mrs", "ms",
 }  # fmt: skip
+# Placeholders like "[name omitted]" or "<name>": an LLM once booked a table under one.
+_PLACEHOLDER = re.compile(r"[\[\]<>{}]")
 
 
 def new_call_id() -> str:
@@ -108,6 +169,17 @@ class PendingAction:
 
 
 @dataclass
+class BookingDraft:
+    """The booking the caller is putting together. Each detail stays until the caller changes it."""
+
+    party_size: int | None = None
+    day: date | None = None
+    time: str | None = None  # 24-hour HH:MM
+    name: str | None = None
+    notes: str | None = None
+
+
+@dataclass
 class CallState:
     """Everything one call needs, shared by all tools through `context.userdata`."""
 
@@ -116,8 +188,12 @@ class CallState:
     call_id: str
     caller_phone: str | None = None  # from the phone line: trusted
     given_phone: str | None = None  # said by the caller: read back before use
+    draft: BookingDraft = field(default_factory=BookingDraft)
+    asked: tuple[str, str] | None = None  # the detail prepare_booking last asked for, and its line
+    done_line: str | None = None  # what the caller heard when the last confirm_action went through
     pending: PendingAction | None = None
     end_call: Callable[[SpeechHandle], None] | None = None  # hangs up after that speech
+    tool_speech: SpeechHandle | None = None  # the last line a tool said, while it may still be queued
     outcomes: list[str] = field(default_factory=list)  # what this call achieved, for the call log
     filler_spoken_in: str | None = None  # speech id of the reply that already said a filler
     told_free: tuple[date, str, int] | None = None  # the request the caller last heard is free
@@ -219,6 +295,8 @@ def resolve_day(s: CallState, said: str) -> date | str:
 def real_name(guest_name: str | None) -> str | None:
     """The caller's name, or None for the stand-ins an LLM writes when it doesn't have one."""
     name = " ".join((guest_name or "").split())
+    if _PLACEHOLDER.search(name):
+        return None
     return None if re.sub(r"[\W_]+", " ", name.lower()).strip() in _NOT_A_NAME else name
 
 
@@ -246,11 +324,56 @@ def _goodbye(s: CallState) -> str:
     return f"Thanks for calling {s.restaurant.name}. Take care, goodbye!"
 
 
-def _last_caller_words(context: RunContext[CallState]) -> str:
+def _last_words(context: RunContext[CallState], role: str) -> str:
     for item in reversed(context.session.history.items):
-        if item.type == "message" and item.role == "user":
+        if item.type == "message" and item.role == role:
             return item.text_content or ""
     return ""
+
+
+def caller_is_done(caller_words: str, agent_line: str) -> bool:
+    """Whether the caller's last words let end_call hang up: a goodbye, or "no" to "anything else?"."""
+    if _GOODBYE.search(caller_words):
+        return True
+    return bool(_ANYTHING_ELSE.search(agent_line)) and bool(_NOTHING_ELSE.match(caller_words))
+
+
+def closes_the_call(caller_words: str, agent_line: str) -> bool:
+    """Whether the caller's whole turn is a goodbye, clear enough to hang up without asking the LLM.
+
+    Stricter than caller_is_done: every word must be a closing word, and without a goodbye in it
+    the agent must just have asked "anything else?" ("Thanks." can also answer "Here's your code.").
+    """
+    words = re.sub(r"[^a-z' ]", " ", caller_words.lower().replace("’", "'")).split()
+    if not words or any(w.strip("'") not in _CLOSING_WORDS for w in words):
+        return False
+    if _FAREWELL.search(caller_words):
+        return True
+    return bool(_ANYTHING_ELSE.search(agent_line)) and caller_is_done(caller_words, agent_line)
+
+
+def _caller_is_done(context: RunContext[CallState]) -> bool:
+    return caller_is_done(_last_words(context, "user"), _last_words(context, "assistant"))
+
+
+def _phone_retry_line(heard: str) -> str:
+    """What to say when a phone number didn't take: what was heard, so the caller knows what to fix."""
+    if not heard:
+        return ASK["phone"][1]
+    n = len(heard)
+    if n < 10:
+        digits = f"{n} digit{'s' if n != 1 else ''}: {speak_digits(heard)}"
+        return f"Sorry, I only caught {digits}. Could you say the whole number again?"
+    return f"Sorry, that's {n} digits, which is too many for a phone number. Could you say the number again?"
+
+
+def _wants_to_hang_up(chat_ctx: llm.ChatContext) -> bool:
+    """The turn being answered is the caller's goodbye (see closes_the_call)."""
+    messages = [i for i in chat_ctx.items if i.type == "message" and i.role in ("user", "assistant")]
+    if not messages or messages[-1].role != "user" or chat_ctx.items[-1] is not messages[-1]:
+        return False  # a follow-up step after a tool, not a fresh caller turn
+    agent_line = next((m.text_content or "" for m in reversed(messages) if m.role == "assistant"), "")
+    return closes_the_call(messages[-1].text_content or "", agent_line)
 
 
 def _instructions(state: CallState, **kwargs) -> str:
@@ -292,7 +415,21 @@ class Receptionist(Agent):
 
     async def llm_node(self, chat_ctx: llm.ChatContext, tools: list[llm.Tool], model_settings: ModelSettings):
         """The default LLM step on the recent history, split into short spoken phrases so the voice
-        starts sooner."""
+        starts sooner.
+
+        A turn that only says goodbye skips the LLM and goes straight to end_call: no request, and no
+        chance of the LLM saying a goodbye of its own and leaving the line open.
+        """
+        if (
+            self._ready
+            and _wants_to_hang_up(chat_ctx)
+            and any(getattr(t, "id", "") == "end_call" for t in tools)
+        ):
+            call = llm.FunctionToolCall(
+                name="end_call", arguments="{}", call_id=f"goodbye_{uuid4().hex[:12]}"
+            )
+            yield llm.ChatChunk(id=call.call_id, delta=llm.ChoiceDelta(role="assistant", tool_calls=[call]))
+            return
         chat_ctx = chat_ctx.copy()
         chat_ctx.truncate(max_items=MAX_HISTORY_ITEMS)
         async for chunk in speak_in_phrases(Agent.default.llm_node(self, chat_ctx, tools, model_settings)):
@@ -317,15 +454,43 @@ class Receptionist(Agent):
         finally:
             task.cancel()
 
-    def _say(self, context: RunContext[CallState], line: str, note: str) -> ToolResult:
+    def _say(
+        self, context: RunContext[CallState], line: str, note: str, *, must_hear: bool = False
+    ) -> ToolResult:
         """Say a fixed line to the caller and end the turn there, with no follow-up LLM request.
 
         `note` is the result the LLM sees in later turns; the line itself joins its history as speech.
+        A `must_hear` line reports something already done (a booking and its code). It's said even if
+        the caller cut into the reply, and can't be cut off: a doubled "Yes." once interrupted the
+        reply mid-booking, the line was dropped, and the caller never heard their code.
         """
-        if context.speech_handle.interrupted:  # the caller cut in: their new turn takes over
+        if context.speech_handle.interrupted and not must_hear:  # their new turn takes over
             return ToolResult(f"{note} (Not said: the caller interrupted.)", reply_required=False)
-        context.session.say(line)
+        # A line still waiting from an earlier reply is out of date. When a caller adds words to a
+        # turn ("Aman." then "Aman."), the first reply is interrupted but the line its tool queued
+        # isn't, so without this the caller hears the same question twice in different words.
+        s = context.userdata
+        if isinstance(s.tool_speech, SpeechHandle) and not s.tool_speech.done():
+            s.tool_speech.interrupt(force=True)
+        s.tool_speech = (
+            context.session.say(line, allow_interruptions=False) if must_hear else context.session.say(line)
+        )
         return ToolResult(note, reply_required=False)
+
+    def _ask(
+        self, context: RunContext[CallState], detail: str, note: str, *, lead: str = "", **fmt: str
+    ) -> ToolResult:
+        """Ask for one missing booking detail, in other words if the caller has just been asked."""
+        s = context.userdata
+        first, again = (line.format(**fmt) for line in ASK[detail])
+        asked_just_now = (
+            s.asked is not None
+            and s.asked[0] == detail
+            and _last_words(context, "assistant").strip() == s.asked[1]
+        )
+        line = again if asked_just_now else f"{lead} {first}".strip()
+        s.asked = (detail, line)
+        return self._say(context, line, note)
 
     def _accept_phone(self, s: CallState, phone_number: str | None) -> str | None:
         """The caller ID if there is one; otherwise the number the caller said, if it's valid."""
@@ -410,6 +575,8 @@ class Receptionist(Agent):
         except ApiError as e:
             return e.say
         s.remember_availability(day, time, party_size, availability)
+        # "Is 8 free?" usually leads to "Book it, then": prepare_booking picks these up.
+        s.draft.party_size, s.draft.day, s.draft.time = party_size, day, time
         if availability.requested_time_available:
             s.told_free = (day, time, party_size)
         return _availability_reply(availability)
@@ -418,28 +585,51 @@ class Receptionist(Agent):
     async def prepare_booking(
         self,
         context: RunContext[CallState],
-        party_size: int,
-        day: str,
-        time: str,
+        party_size: int | None = None,
+        day: str | None = None,
+        time: str | None = None,
         guest_name: str | None = None,
         phone_number: str | None = None,
         notes: str | None = None,
     ) -> str | ToolResult:
-        """Check the table, ask the caller for anything missing, then read the booking back. Books nothing.
+        """Make a booking, one detail at a time. It remembers what the caller already said, asks for
+        the next missing detail, checks the table, then reads the booking back. Books nothing.
 
         Args:
+            party_size: Only once the caller has said it.
             day: The day as the caller said it: "Tuesday", "tomorrow", "27th", or YYYY-MM-DD.
-            time: 24-hour HH:MM.
+            time: 24-hour HH:MM, only once the caller has said it.
             guest_name: Only once the caller has said it.
-            phone_number: Only if there's no caller ID.
+            phone_number: The digits the caller said. Only if there's no caller ID.
             notes: Special requests.
         """
         s = context.userdata
-        if (at := _parse_time(time)) is None:
+        draft = s.draft
+        if time is not None and _parse_time(time) is None:
             return "Use time as 24-hour HH:MM."
-        if isinstance(found := resolve_day(s, day), str):
+        found = resolve_day(s, day) if day else None
+        if isinstance(found, str) and found != ASK_WHICH_DAY:
             return found
-        day = found
+        # Only what the caller said this turn changes; everything else is as they said it before.
+        if day:
+            draft.day = found if isinstance(found, date) else None
+        draft.time = time or draft.time
+        draft.party_size = party_size or draft.party_size
+        draft.name = real_name(guest_name) or draft.name
+        draft.notes = notes or draft.notes
+        if not draft.party_size:
+            return self._ask(context, "party_size", "Asked how many people.")
+        if draft.party_size > s.restaurant.phone_party_limit:
+            return TOO_MANY_FOR_THE_PHONE.format(limit=s.restaurant.phone_party_limit)
+        if draft.day is None and draft.time is None:
+            return self._ask(context, "day_and_time", "Asked for the day and time.")
+        if draft.day is None:
+            return self._ask(context, "day", "Asked which day.")
+        if draft.time is None:
+            return self._ask(context, "time", "Asked what time.", day=on_day(draft.day, s.today()))
+        party_size, day, time = draft.party_size, draft.day, draft.time
+        at = _parse_time(time)
+        assert at is not None  # checked when it was given
         # Reuse the check the caller just heard instead of a second round trip to the database.
         availability = s.recent_availability(day, time, party_size)
         if availability is None:
@@ -459,23 +649,23 @@ class Receptionist(Agent):
         start = availability.slots[0].start.astimezone(s.tz)
         heard_free = s.told_free == (day, time, party_size)
         s.told_free = (day, time, party_size)
-        name = real_name(guest_name)
+        news = "" if heard_free else f"Good news, we have a table for {party_size} {s.when(start)}."
+        name = draft.name
         if name is None:
-            news = "" if heard_free else f"Good news, we have a table for {party_size} {s.when(start)}. "
-            return self._say(
-                context, f"{news}What name should I put the booking under?", "It's free. Asked for the name."
-            )
+            return self._ask(context, "name", "It's free. Asked for the name.", lead=news)
+        if phone_number is None and s.phone is None and s.asked and s.asked[0] == "phone":
+            # The caller was just asked for their number. If the LLM didn't pass on what they said,
+            # take the digits from their words rather than ask again.
+            said = _last_words(context, "user")
+            phone_number = said if len(spoken_digits(said)) >= 6 else None
         phone = self._accept_phone(s, phone_number)
+        if phone is None and phone_number:  # a number came, but not a whole one: say what was heard
+            line = _phone_retry_line(spoken_digits(phone_number))
+            s.asked = ("phone", line)
+            return self._say(context, line, "The number wasn't complete. Asked for it again.")
         if phone is None:
-            lead = (
-                f"Thanks, {name}."
-                if heard_free
-                else f"Good news, we have a table for {party_size} {s.when(start)}."
-            )
-            return self._say(
-                context,
-                f"{lead} What's the best phone number for the booking?",
-                "It's free. Asked for a phone number.",
+            return self._ask(
+                context, "phone", "It's free. Asked for a phone number.", lead=news or f"Thanks, {name}."
             )
         request = CreateReservationRequest(
             restaurant_id=s.restaurant.id,
@@ -484,16 +674,17 @@ class Receptionist(Agent):
             guest_phone=phone,
             party_size=party_size,
             start=start,
-            notes=notes,
+            notes=draft.notes,
             call_id=s.call_id,
         )
         s.pending = PendingAction("book", request, prepared_in=context.speech_handle.id)
+        s.asked = None
         day_and_time = f"{speak_day(start.date(), s.today())} at {speak_time(start)}"
         details = f"a table for {party_size} under {name}, {day_and_time}"
         if not s.caller_phone:
             details += f", and your number is {speak_phone(phone)}"
-        if notes:
-            details += f", with the note: {notes}"
+        if draft.notes:
+            details += f", with the note: {draft.notes}"
         lead = random.choice(READ_BACK) if heard_free else "Good news, that time's free. Just to confirm:"
         return self._say(
             context,
@@ -607,6 +798,8 @@ class Receptionist(Agent):
         """Carry out the prepared booking, change or cancellation, only after a clear yes."""
         s = context.userdata
         pending = s.pending
+        if pending is None and s.done_line:  # a second "yes" after it went through
+            return ALREADY_DONE.format(line=s.done_line)
         if pending is None:
             return "There's nothing to confirm. Prepare the booking, change or cancellation first."
         if pending.prepared_in == context.speech_handle.id:
@@ -631,6 +824,7 @@ class Receptionist(Agent):
         s.outcomes.append(OUTCOME_FOR[pending.kind])
         if pending.kind == "book":
             s.booked_on = res.start.astimezone(s.tz).date()
+            s.draft = BookingDraft(name=s.draft.name)  # a second booking starts afresh, same caller
             line = f"You're all set! Your booking code is {spell_code(res.code)}."
         elif pending.kind == "change":
             line = (
@@ -640,10 +834,12 @@ class Receptionist(Agent):
         else:
             s.booked_on = None
             line = "Done, that booking is cancelled."
+        s.done_line = line
         return self._say(
             context,
             f"{line} {random.choice(ANYTHING_ELSE)}",
             f"Done and told the caller. {res.summary}",
+            must_hear=True,
         )
 
     @function_tool()
@@ -682,12 +878,13 @@ class Receptionist(Agent):
             context,
             f"{receipt.summary} {random.choice(ANYTHING_ELSE)}",
             f"Message saved and the caller told: {receipt.summary}",
+            must_hear=True,
         )
 
     @function_tool()
     async def end_call(self, context: RunContext[CallState]) -> str | ToolResult:
         """Say goodbye and hang up, only once the caller has said goodbye or that they're done."""
-        if not _GOODBYE.search(_last_caller_words(context)):
+        if not _caller_is_done(context):
             return NOT_DONE_YET
         s = context.userdata
         goodbye = context.session.say(_goodbye(s))

@@ -86,3 +86,26 @@ async def test_books_only_after_read_back_and_a_yes(call, judge):
 async def test_hangs_up_when_the_caller_is_done(call):
     result = await call.session.run(user_input="That's everything, thanks so much. Bye!")
     assert "end_call" in called(result)
+
+
+async def test_a_booking_given_bit_by_bit_never_asks_for_a_detail_twice(call):
+    """The demo-call shape: each answer adds one detail, and a short phone number gets corrected."""
+    said: list[str] = []
+
+    async def caller(words: str):
+        result = await call.session.run(user_input=words)
+        said.extend(
+            e.item.text_content for e in result.events if e.type == "message" and e.item.role == "assistant"
+        )
+        return result
+
+    await caller("Hi, I'd like to book a table.")
+    await caller("For four people.")
+    await caller("This Tuesday at 7:30 in the evening.")
+    await caller("It's Aman.")
+    await caller("One two three four five six seven eight nine.")
+    assert "only caught 9 digits" in said[-1]
+    await caller("Sorry: nine eight seven six five, four three two one zero.")
+    assert said[-1].endswith("Shall I book it?") and "under Aman" in said[-1]
+    asked_for_name = [line for line in said if "name" in line.lower()]
+    assert len(asked_for_name) == 1, said

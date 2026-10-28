@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { CircleAlert, Ellipsis, LogOut, RefreshCw } from "lucide-react";
+import { Ellipsis, LogOut, RotateCcw } from "lucide-react";
 import type { DashboardData, Dish, Message, SheetState, Tab } from "../_dashboard/types";
 import { formatPhone, formatTime, RESTAURANT } from "../_dashboard/format";
 import { NAV, TAB_IDS } from "../_dashboard/nav";
@@ -12,11 +12,10 @@ import { Messages } from "../_dashboard/messages";
 import { Calls } from "../_dashboard/calls";
 import { Menu, dishCategories } from "../_dashboard/menu";
 import { Hours } from "../_dashboard/hours";
-import { TestCall } from "../_dashboard/test-call";
-import { useLiveCall } from "../_brand/use-live-call";
 import { BRAND, signOut } from "../_brand/brand";
 import { Insights } from "../_dashboard/insights";
 import { useDashboardMotion } from "../_dashboard/motion";
+import { SEATING_MINUTES, bookingCode, freeTable, sampleDashboard } from "../_dashboard/sample-data";
 import {
   BookingSheet,
   CallSheet,
@@ -33,35 +32,13 @@ import {
 
 const EMPTY: DashboardData = { reservations: [], tables: [], menu: [], hours: [], closures: [], info: [], calls: [], messages: [] };
 
-async function getJson(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
-  return res.json();
-}
-
-async function send(url: string, method: string, body?: unknown, headers: Record<string, string> = {}) {
-  const res = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json", ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
-  const data = await res.json().catch(() => ({}));
-  const error = typeof data?.error === "string" ? data.error : data?.error?.say || data?.error?.message;
-  return { ok: res.ok, data, error: error as string | undefined };
-}
-
-function friendlyBookingError(message?: string) {
-  if (!message) return "Couldn't save the booking. Try again.";
-  if (/excl|overlap|conflict/i.test(message)) return "That table is already booked at that time. Try another time.";
-  return message;
-}
+// The dashboard is a public demo: it runs on sample data and never reads or writes the database.
+// Changes a visitor makes live in this tab until they reset or reload.
 
 export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>("tonight");
   const [data, setData] = useState<DashboardData>(EMPTY);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadError, setLoadError] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const [sheet, setSheet] = useState<SheetState | null>(null);
@@ -71,53 +48,22 @@ export default function DashboardPage() {
   const appRef = useRef<HTMLDivElement>(null);
   useDashboardMotion(appRef, tab);
 
-  // The agent saves the call log when the call closes; give it a moment, then refresh Calls.
-  const testCall = useLiveCall({ callerName: "Staff test call", onEnded: () => setTimeout(() => load(true), 4000) });
-
-  const restaurantId = RESTAURANT.id;
-
   /* ---------- Data ---------- */
 
-  const load = useCallback(async (silent = false) => {
-    if (silent) setRefreshing(true);
-    const results = await Promise.allSettled([
-      getJson("/api/dashboard/reservations"),
-      getJson("/api/dashboard/tables"),
-      getJson("/api/dashboard/menu"),
-      getJson("/api/dashboard/hours"),
-      getJson("/api/dashboard/info"),
-      getJson("/api/dashboard/calls"),
-      getJson("/api/dashboard/messages")
-    ]);
-    const [rRes, tRes, mRes, hRes, iRes, cRes, msgRes] = results.map(r => (r.status === "fulfilled" ? r.value : null));
-    setData(prev => ({
-      reservations: rRes?.reservations ?? prev.reservations,
-      tables: tRes?.tables ?? prev.tables,
-      menu: mRes?.items ?? prev.menu,
-      hours: hRes?.hours ?? prev.hours,
-      closures: hRes?.closures ?? prev.closures,
-      info: iRes?.entries ?? prev.info,
-      calls: cRes?.calls ?? prev.calls,
-      messages: msgRes?.messages ?? prev.messages
-    }));
-    const failed = results.filter(r => r.status === "rejected");
-    if (failed.length) console.error("Dashboard load failed:", failed);
-    setLoadError(failed.length > 0);
+  // Built in the browser, after the first paint, so the sample times match the visitor's clock
+  // and the server render (skeletons) matches the first client render.
+  const reset = useCallback(() => {
+    const at = new Date();
+    setNow(at);
+    setData(sampleDashboard(at));
     setLoading(false);
-    setRefreshing(false);
   }, []);
 
   useEffect(() => {
-    load();
+    reset();
     const clock = setInterval(() => setNow(new Date()), 15_000);
-    const poll = setInterval(() => {
-      if (document.visibilityState === "visible") load(true);
-    }, 60_000);
-    return () => {
-      clearInterval(clock);
-      clearInterval(poll);
-    };
-  }, [load]);
+    return () => clearInterval(clock);
+  }, [reset]);
 
   /* ---------- Navigation (kept in the URL hash so refresh and back work) ---------- */
 
@@ -164,40 +110,50 @@ export default function DashboardPage() {
 
   /* ---------- Reservations ---------- */
 
+  // The same rules the booking API enforces, checked here against the sample data.
   async function handleAddReservation(b: NewBooking): Promise<string | null> {
-    try {
-      const startIso = `${b.date}T${b.time}:00${RESTAURANT.offset}`;
-      const res = await send("/api/dashboard/reservations", "POST", {
-        restaurant_id: restaurantId,
-        guest_name: b.guest_name,
-        guest_phone: b.guest_phone,
-        party_size: b.party_size,
-        start: startIso,
-        notes: b.notes
-      });
-      if (!res.ok) return friendlyBookingError(res.error);
-      notify(`Booked ${b.guest_name}, ${formatTime(startIso)}${res.data?.code ? ` · ${res.data.code}` : ""}`);
-      load(true);
-      return null;
-    } catch {
-      return "Couldn't reach the server. Check the connection and try again.";
-    }
+    const startIso = `${b.date}T${b.time}:00${RESTAURANT.offset}`;
+    const start = new Date(startIso);
+    if (b.party_size > RESTAURANT.partyLimit) return `Parties over ${RESTAURANT.partyLimit} are arranged by the manager.`;
+    if (start.getTime() < Date.now()) return "That time has already passed. Pick a later time.";
+    const day = data.hours.find(h => h.weekday === new Date(`${b.date}T12:00:00${RESTAURANT.offset}`).getUTCDay());
+    const closure = data.closures.find(c => c.date === b.date);
+    if (closure || !day?.open) return closure ? `We're closed that day: ${closure.reason}.` : "We're closed that day.";
+    const opens = (day.openTime ?? "00:00").slice(0, 5);
+    const last = (day.lastSeating ?? day.closeTime ?? "23:59").slice(0, 5);
+    if (b.time < opens || b.time > last) return `Bookings run from ${opens} to the last seating at ${last}.`;
+    const table = freeTable(data, startIso, b.party_size);
+    if (!table) return "No table that size is free then. Try another time.";
+    const code = bookingCode(new Set(data.reservations.map(r => r.code)));
+    setData(d => ({
+      ...d,
+      reservations: [
+        ...d.reservations,
+        {
+          id: `local-booking-${Date.now()}`,
+          tableId: table.id,
+          tableLabel: table.label,
+          guestName: b.guest_name,
+          guestPhone: b.guest_phone,
+          partySize: b.party_size,
+          start: start.toISOString(),
+          end: new Date(start.getTime() + SEATING_MINUTES * 60_000).toISOString(),
+          status: "confirmed",
+          code,
+          notes: b.notes || null,
+          source: "staff",
+          callId: null
+        }
+      ]
+    }));
+    notify(`Booked ${b.guest_name}, ${formatTime(startIso)} · ${code}`);
+    return null;
   }
 
   async function handleCancelReservation(id: string) {
-    try {
-      const res = await send("/api/dashboard/reservations", "PATCH", { id, status: "cancelled" });
-      if (!res.ok) {
-        notify(res.error || "Couldn't cancel the booking.", "error");
-        return false;
-      }
-      setData(d => ({ ...d, reservations: d.reservations.map(r => (r.id === id ? { ...r, status: "cancelled" } : r)) }));
-      notify("Booking cancelled. The table is free.");
-      return true;
-    } catch {
-      notify("Couldn't cancel the booking.", "error");
-      return false;
-    }
+    setData(d => ({ ...d, reservations: d.reservations.map(r => (r.id === id ? { ...r, status: "cancelled" } : r)) }));
+    notify("Booking cancelled. The table is free.");
+    return true;
   }
 
   /* ---------- Menu ---------- */
@@ -207,96 +163,60 @@ export default function DashboardPage() {
       notify("Confirm this dish's allergens before putting it on today's menu.", "error");
       return;
     }
-    const next = !dish.availableToday;
-    setData(d => ({ ...d, menu: d.menu.map(m => (m.id === dish.id ? { ...m, availableToday: next } : m)) }));
-    try {
-      const res = await send("/api/dashboard/menu", "PATCH", { id: dish.id, availableToday: next });
-      if (!res.ok) throw new Error(res.error);
-    } catch (err: any) {
-      setData(d => ({ ...d, menu: d.menu.map(m => (m.id === dish.id ? { ...m, availableToday: !next } : m)) }));
-      notify(err?.message || "Couldn't update the dish.", "error");
-    }
+    setData(d => ({ ...d, menu: d.menu.map(m => (m.id === dish.id ? { ...m, availableToday: !dish.availableToday } : m)) }));
   }
 
   async function handleSaveDish(form: DishForm, id?: string): Promise<string | null> {
     if (form.availableToday && !form.allergensListed) {
       return "Confirm the allergens before putting the dish on today's menu.";
     }
-    try {
-      const res = id
-        ? await send("/api/dashboard/menu", "PATCH", {
-            id,
-            price: form.price,
-            description: form.description,
-            dietaryTags: form.dietaryTags,
-            spiceLevel: form.spiceLevel,
-            allergens: form.allergens,
-            allergensListed: form.allergensListed,
-            availableToday: form.availableToday
-          })
-        : await send("/api/dashboard/menu", "POST", form);
-      if (!res.ok) return res.error || "Couldn't save the dish.";
-      notify(id ? "Dish saved" : `${form.name} added to the menu`);
-      load(true);
-      return null;
-    } catch {
-      return "Couldn't reach the server. Check the connection and try again.";
-    }
+    const fields = {
+      price: form.price,
+      description: form.description,
+      dietaryTags: form.dietaryTags,
+      spiceLevel: form.spiceLevel,
+      allergens: form.allergens,
+      allergensListed: form.allergensListed,
+      availableToday: form.availableToday
+    };
+    setData(d => ({
+      ...d,
+      menu: id
+        ? d.menu.map(m => (m.id === id ? { ...m, ...fields } : m))
+        : [...d.menu, { id: `local-dish-${Date.now()}`, name: form.name, category: form.category, ...fields }]
+    }));
+    notify(id ? "Dish saved" : `${form.name} added to the menu`);
+    return null;
   }
 
   async function handleDeleteDish(id: string) {
-    try {
-      const res = await send(`/api/dashboard/menu?id=${encodeURIComponent(id)}`, "DELETE");
-      if (!res.ok) throw new Error(res.error);
-      setData(d => ({ ...d, menu: d.menu.filter(m => m.id !== id) }));
-      notify("Dish deleted");
-      return true;
-    } catch (err: any) {
-      notify(err?.message || "Couldn't delete the dish.", "error");
-      return false;
-    }
+    setData(d => ({ ...d, menu: d.menu.filter(m => m.id !== id) }));
+    notify("Dish deleted");
+    return true;
   }
 
   /* ---------- Messages ---------- */
 
   async function handleUpdateMessageStatus(id: string, newStatus: string) {
-    const prev = data.messages.find(m => m.id === id)?.status;
     setData(d => ({ ...d, messages: d.messages.map(m => (m.id === id ? { ...m, status: newStatus } : m)) }));
-    try {
-      const res = await send("/api/dashboard/messages", "PATCH", { id, status: newStatus });
-      if (!res.ok) throw new Error(res.error);
-    } catch (err: any) {
-      setData(d => ({ ...d, messages: d.messages.map(m => (m.id === id && prev ? { ...m, status: prev } : m)) }));
-      notify(err?.message || "Couldn't update the message.", "error");
-    }
   }
 
   /* ---------- Hours and info ---------- */
 
   async function handleAddClosure(closure: { date: string; reason: string }) {
-    try {
-      const res = await send("/api/dashboard/hours", "PATCH", { addClosure: closure });
-      if (!res.ok) throw new Error(res.error);
-      notify("Closed date added");
-      load(true);
-      return true;
-    } catch (err: any) {
-      notify(err?.message || "Couldn't add the closed date.", "error");
+    if (data.closures.some(c => c.date === closure.date)) {
+      notify("That date is already closed.", "error");
       return false;
     }
+    setData(d => ({ ...d, closures: [...d.closures, { id: `local-closure-${Date.now()}`, ...closure }] }));
+    notify("Closed date added");
+    return true;
   }
 
   async function handleRemoveClosure(closureId: string) {
-    try {
-      const res = await send("/api/dashboard/hours", "PATCH", { removeClosureId: closureId });
-      if (!res.ok) throw new Error(res.error);
-      setData(d => ({ ...d, closures: d.closures.filter(c => c.id !== closureId) }));
-      notify("Closed date removed");
-      return true;
-    } catch (err: any) {
-      notify(err?.message || "Couldn't remove the closed date.", "error");
-      return false;
-    }
+    setData(d => ({ ...d, closures: d.closures.filter(c => c.id !== closureId) }));
+    notify("Closed date removed");
+    return true;
   }
 
   async function handleSaveHours(weekday: number, form: HoursForm) {
@@ -307,42 +227,26 @@ export default function DashboardPage() {
       closeTime: form.open ? form.closeTime : null,
       lastSeating: form.open ? form.lastSeating : null
     };
-    try {
-      const res = await send("/api/dashboard/hours", "PATCH", body);
-      if (!res.ok) throw new Error(res.error);
-      setData(d => ({
-        ...d,
-        hours: d.hours.some(h => h.weekday === weekday)
-          ? d.hours.map(h => (h.weekday === weekday ? { ...h, ...body } : h))
-          : [...d.hours, body]
-      }));
-      notify("Opening hours saved");
-      return true;
-    } catch (err: any) {
-      notify(err?.message || "Couldn't save the hours.", "error");
-      return false;
-    }
+    setData(d => ({
+      ...d,
+      hours: d.hours.some(h => h.weekday === weekday) ? d.hours.map(h => (h.weekday === weekday ? { ...h, ...body } : h)) : [...d.hours, body]
+    }));
+    notify("Opening hours saved");
+    return true;
   }
 
   async function handleSaveInfoAnswer(topic: string, language: string, answer: string) {
-    try {
-      const res = await send("/api/dashboard/info", "PATCH", { topic, language, answer });
-      if (!res.ok) throw new Error(res.error);
-      setData(d => {
-        const exists = d.info.some(e => e.topic === topic && e.language === language);
-        return {
-          ...d,
-          info: exists
-            ? d.info.map(e => (e.topic === topic && e.language === language ? { ...e, answer } : e))
-            : [...d.info, { topic, language, answer }]
-        };
-      });
-      notify("Answer saved");
-      return true;
-    } catch (err: any) {
-      notify(err?.message || "Couldn't save the answer.", "error");
-      return false;
-    }
+    setData(d => {
+      const exists = d.info.some(e => e.topic === topic && e.language === language);
+      return {
+        ...d,
+        info: exists
+          ? d.info.map(e => (e.topic === topic && e.language === language ? { ...e, answer } : e))
+          : [...d.info, { topic, language, answer }]
+      };
+    });
+    notify("Answer saved");
+    return true;
   }
 
   /* ---------- Render ---------- */
@@ -382,11 +286,8 @@ export default function DashboardPage() {
         />
       );
       break;
-    case "test-call":
-      screen = <TestCall call={testCall} />;
-      break;
     case "insights":
-      screen = <Insights calls={data.calls} menu={data.menu} loading={loading} />;
+      screen = <Insights calls={data.calls} menu={data.menu} loading={loading} now={now} />;
       break;
   }
 
@@ -478,13 +379,15 @@ export default function DashboardPage() {
   const refreshButton = (
     <button
       type="button"
-      className={`icon-btn${refreshing ? " is-spinning" : ""}`}
-      onClick={() => load(true)}
-      aria-label="Refresh"
-      title="Refresh"
-      disabled={refreshing}
+      className="icon-btn"
+      onClick={() => {
+        reset();
+        notify("Sample data reset");
+      }}
+      aria-label="Reset sample data"
+      title="Reset sample data"
     >
-      <RefreshCw size={16} />
+      <RotateCcw size={16} />
     </button>
   );
   const workspace = (
@@ -557,18 +460,6 @@ export default function DashboardPage() {
             {refreshButton}
           </div>
         </header>
-
-        {loadError && (
-          <div className="page" style={{ paddingBottom: 0, marginBottom: -24 }}>
-            <div className="notice" role="alert" style={{ marginBottom: 0 }}>
-              <CircleAlert size={18} />
-              <span>Some data didn't load, so parts of this page may be out of date.</span>
-              <button type="button" className="btn btn-secondary" onClick={() => load(true)}>
-                Try again
-              </button>
-            </div>
-          </div>
-        )}
 
         <main>{screen}</main>
       </div>

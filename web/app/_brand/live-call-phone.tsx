@@ -150,7 +150,7 @@ export function LiveCallPhone({ call, frameless }: { call: LiveCall; frameless?:
             <input
               id="caller-input"
               type="text"
-              placeholder="Type instead of talking"
+              placeholder="Message the receptionist"
               value={input}
               onChange={e => setInput(e.target.value)}
               autoComplete="off"

@@ -13,6 +13,7 @@ import {
   type RemoteAudioTrack,
   type RemoteParticipant
 } from "livekit-client";
+import { playHangUp, primeCallSounds, startRingback } from "./call-sounds";
 
 /*
  * A real browser call to the voice agent in agent/. The browser joins a LiveKit room with a token
@@ -107,6 +108,7 @@ export function useLiveCall({ callerName = "Website caller", onEnded }: { caller
 
   const start = useCallback(async () => {
     if (room.current) return;
+    primeCallSounds(); // inside the click, so the browser lets the ringback play
     setError(null);
     setNotice(null);
     setLines([]);
@@ -273,6 +275,22 @@ export function useLiveCall({ callerName = "Website caller", onEnded }: { caller
   useEffect(() => {
     if (phase === "connecting") setStartedAt(null);
   }, [phase]);
+
+  // Ringback until the receptionist answers; a hang-up tone when a call that was answered ends.
+  const stopRinging = useRef<(() => void) | null>(null);
+  const answered = useRef(false);
+  useEffect(() => {
+    const ringing = phase === "connecting" || phase === "ringing";
+    if (ringing && !stopRinging.current) stopRinging.current = startRingback();
+    if (!ringing && stopRinging.current) {
+      stopRinging.current();
+      stopRinging.current = null;
+    }
+    if (phase === "listening" || phase === "thinking" || phase === "speaking") answered.current = true;
+    if (phase === "ended" && answered.current) playHangUp();
+    if (phase === "ended" || phase === "idle" || phase === "connecting") answered.current = false;
+  }, [phase]);
+  useEffect(() => () => stopRinging.current?.(), []);
 
   // Hang up if the page goes away mid-call.
   useEffect(() => {
