@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { FlaskConical } from "lucide-react";
 import { siteFonts } from "../_brand/fonts";
 import { SiteNav } from "../_brand/site-nav";
 import { LiveCallPhone, SUGGESTIONS } from "../_brand/live-call-phone";
@@ -19,9 +20,16 @@ export function DemoCall() {
         </div>
 
         <div className="demo-copy">
+          <p className="demo-note" role="note">
+            <FlaskConical size={15} aria-hidden="true" />
+            <span>
+              <strong>Demo version, not the finished product.</strong> The receptionist is still being built and tuned, so now
+              and then a reply may be slow or wrong.
+            </span>
+          </p>
           <h1 className="display-1 demo-title">Call The Saffron Table.</h1>
           <p className="lede">
-            This is a live call to the real receptionist, with the same voice and tools as a phone call. Press call, allow the
+            This is a live call to the AI receptionist, with the same voice and tools as a phone call. Press call, allow the
             microphone, and talk like a guest would. Cut in whenever you like.
           </p>
 

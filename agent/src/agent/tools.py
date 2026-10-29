@@ -50,7 +50,6 @@ from agent.speakable import (
     on_day,
     speak_day,
     speak_digits,
-    speak_in_phrases,
     speak_phone,
     speak_time,
     spell_code,
@@ -414,8 +413,11 @@ class Receptionist(Agent):
             raise StopResponse()
 
     async def llm_node(self, chat_ctx: llm.ChatContext, tools: list[llm.Tool], model_settings: ModelSettings):
-        """The default LLM step on the recent history, split into short spoken phrases so the voice
-        starts sooner.
+        """The default LLM step on the recent history.
+
+        The reply goes to the TTS in one piece, and Deepgram starts on its first full sentence. Split
+        into phrases, it broke off mid-sentence: LiveKit plays each piece to the end before starting
+        the next, and every Aura piece opens with up to 0.4 s of silence.
 
         A turn that only says goodbye skips the LLM and goes straight to end_call: no request, and no
         chance of the LLM saying a goodbye of its own and leaving the line open.
@@ -432,7 +434,7 @@ class Receptionist(Agent):
             return
         chat_ctx = chat_ctx.copy()
         chat_ctx.truncate(max_items=MAX_HISTORY_ITEMS)
-        async for chunk in speak_in_phrases(Agent.default.llm_node(self, chat_ctx, tools, model_settings)):
+        async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
             yield chunk
 
     async def _waiting[T](self, context: RunContext[CallState], call: Awaitable[T]) -> T:

@@ -640,3 +640,20 @@ async def test_the_llm_sees_only_the_recent_conversation(agent, monkeypatch):
     assert sent[0].role == "system"  # the instructions always go
     assert len(sent) == tools.MAX_HISTORY_ITEMS + 1 and sent[-1].text_content == "line 39"
     assert len(history.items) == 41  # the session's own history is untouched
+
+
+async def test_the_reply_reaches_the_voice_in_one_piece(agent, monkeypatch):
+    """Demo call: split at its first comma, the reply broke off mid-sentence. Each flushed piece plays
+    to the end before the next one starts, and each opens with its own silence."""
+    from livekit.agents import Agent
+
+    reply = ["Sure, we're open", " 12 to 3 PM. Would you", " like to book a table?"]
+
+    async def fake_llm_node(self, chat_ctx, tools_, model_settings):
+        for part in reply:
+            yield part
+
+    monkeypatch.setattr(Agent.default, "llm_node", fake_llm_node)
+    history = ChatContext()
+    history.add_message(role="user", content="When are you open for lunch?")
+    assert [c async for c in agent.llm_node(history, [], None)] == reply  # no FlushSentinel in between

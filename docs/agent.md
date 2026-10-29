@@ -46,7 +46,7 @@ When the call ends, a summary line gives p50 and p95 for `total` and the median 
 
 ### What makes replies fast
 
-- **Speak from the first phrase.** LiveKit hands the whole reply to the TTS as one piece, and Deepgram starts on a full sentence. `Receptionist.llm_node` inserts a flush after the first phrase (first comma or full stop with three or more words) and at each sentence end after that, so the voice starts within ~10 ms of the LLM's first phrase. LiveKit synthesises the next piece while the previous one plays, so there are no gaps. Word-by-word synthesis would sound robotic: TTS needs a few words for natural intonation.
+- **One TTS piece per reply.** The whole reply goes to the TTS as one piece, and Deepgram starts on the first full sentence (first audio about 0.3 s after its last word). Until 29 Oct 2026, `Receptionist.llm_node` flushed after the first phrase to start a few words sooner, and the voice broke up in demo calls. LiveKit plays each flushed piece to the end before starting the next, and every Aura piece opens with 20–390 ms of silence, so replies paused mid-sentence and the intonation reset at the comma. A short first sentence, which the prompt asks for, keeps the start quick.
 - **Facts in the prompt instead of RAG.** The whole knowledge base (about 20 dishes and six info topics, ~500 tokens) is fetched once while the greeting plays ([facts.py](../agent/src/agent/facts.py)) and added to the prompt. Menu and info questions then take one LLM request and no API round trip. RAG would add a retrieval step for a corpus this small. Availability and bookings still go through tools, live.
 - **Early voice.** Preemptive generation starts the LLM, and the voice for its reply, before the caller's turn is confirmed.
 - **Two Groq models before Gemini.** Groq counts free limits per model, so `gpt-oss-120b` then `gpt-oss-20b` doubles the free budget; Gemini is the last resort.
@@ -61,7 +61,7 @@ Measured with the benchmark on 24 Oct 2026, agent clock (caller stops → agent 
 | Paneer tikka allergens | 14.9 s | 1.8–2.0 s |
 | Table on Tuesday (availability tool) | 22.8 s | 9.4–9.9 s |
 
-"Before" was dominated by the LLM: Groq had hit its free limits, so requests went to Gemini, which was taking 5–17 s. After the change, the slow case is the tool path: a ~1.4 s availability query to the database in Tokyo plus extra LLM requests, which on the free tier can hit Groq's per-minute limit. Callers hear about 1.3 s more than the agent clock because of network transit and audio buffering.
+"Before" was dominated by the LLM: Groq had hit its free limits, so requests went to Gemini, which was taking 5–17 s. After the change, the slow case is the tool path: a ~1.4 s availability query to the database in Tokyo plus extra LLM requests, which on the free tier can hit Groq's per-minute limit. Callers hear about 1.3 s more than the agent clock because of network transit and audio buffering. These runs still split replies at the first phrase. They haven't been re-run since; the voice now also waits for the LLM to finish the first sentence.
 
 ### Week 1 LLM measurements (24 Oct 2026, free tiers, text-only, same prompt)
 
@@ -93,7 +93,7 @@ Every call gets a fresh id (`call_<32 hex>`, from `new_call_id()` in [tools.py](
 
 So in the database each booking traces back to exactly one conversation (`reservations.call_id = calls.call_id`). Room names aren't used for this: console mode reuses one, and a test page can reuse a name it's given. Each call also runs in its own session with its own state, so two people calling at once can't see each other's pending booking or phone number; a unit test interleaves two such calls step by step.
 
-The prompt ([receptionist_en.md](../agent/src/agent/prompts/receptionist_en.md)) keeps the agent to restaurant topics and sets the speaking style. In browser calls, a quiet restaurant background and keyboard sounds while a tool works make it feel like a real front desk. Console mode has no background audio.
+The prompt ([receptionist_en.md](../agent/src/agent/prompts/receptionist_en.md)) keeps the agent to restaurant topics and sets the speaking style. In browser calls, a quiet restaurant background makes it feel like a real front desk. There is no keyboard sound while the agent thinks: the background track plays 0.4 s behind (its buffer), so the typing landed on the first words of nearly every reply and the voice seemed to crackle. Console mode has no background audio.
 
 ## Restaurant data
 

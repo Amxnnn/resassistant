@@ -273,6 +273,10 @@ Quiet, confident pills that point outward.
 - **Style:** veil fill, hair ring, 14px sentence-case text, min 38px tall, wrap freely.
 - **State:** hover lifts to 0.12 fill and 0.26 ring; disabled at half opacity. They send a suggested question into the demo call.
 
+### Demo note
+- **Style:** veil fill, hair ring, 16px radius, 14px ink-2 text with a 500-weight ink lead-in and a 15px lucide flask in ink-3. Max 52ch.
+- **Use:** once, above the demo headline, saying the call is a demo and not the finished product. Not interactive.
+
 ### Cards / Containers (outcome slabs)
 - **Corner Style:** 30px (24px on phones).
 - **Background:** rust gradient lit from a bottom corner (booked from the left, message from the right), one paper slab (answered), one dark slab with a hair ring (hand-off).

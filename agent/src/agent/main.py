@@ -364,15 +364,11 @@ async def entrypoint(ctx: JobContext) -> None:
     session.say(build_greeting(restaurant))
     limits.start()
 
-    # A faint front-of-house hum, and keyboard sounds while a tool is working. Started after the
-    # greeting so it doesn't delay it. Room calls only: console mode logs a warning and skips it.
-    background = BackgroundAudioPlayer(
-        ambient_sound=AudioConfig(BuiltinAudioClip.CROWDED_ROOM, volume=0.05),
-        thinking_sound=[
-            AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING, volume=0.35, probability=0.6),
-            AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING2, volume=0.28, probability=0.4),
-        ],
-    )
+    # A faint front-of-house hum, started after the greeting so it doesn't delay it. Room calls only:
+    # console mode logs a warning and skips it. No keyboard "thinking" sound: this track plays 0.4 s
+    # behind (its buffer), so the typing ran over the first words of nearly every reply, louder than
+    # the voice's average level, and stopped with a click. Callers heard the voice crackle.
+    background = BackgroundAudioPlayer(ambient_sound=AudioConfig(BuiltinAudioClip.CROWDED_ROOM, volume=0.05))
     await background.start(room=ctx.room, agent_session=session)
 
     async def load_restaurant_facts(state: CallState) -> None:
