@@ -173,6 +173,38 @@ Measured on 24 Oct 2026 from Bangalore, web app running locally, database in Tok
 
 The time is mostly the web API making several database queries one after another, each paying the Tokyo round trip. The agent reuses an availability check from the last 90 seconds instead of repeating it when the caller books, and keyboard sounds play while a tool runs. The big wins are on the web side: a Supabase project in ap-south-1 (Mumbai), queries run in parallel or cached, and booking without re-running the full availability search.
 
+## Deploying to LiveKit Cloud
+
+The agent runs on LiveKit Cloud's free Build plan:
+- one deployment
+- 5 calls at once
+- 1,000 agent minutes a month. This is a hard cap: once it's used up, new calls fail and nothing is charged.
+
+LiveKit builds the image itself from `agent/` with the [Dockerfile](../agent/Dockerfile). The upload leaves out `.env*` files, anything in `.gitignore`, and anything in [.dockerignore](../agent/.dockerignore).
+
+**Region: `us-east` (Ashburn).** The region can't be changed after the agent is created. Every turn calls Deepgram (STT and TTS) and Groq, which are served from the US, so the agent sits next to them. Only the caller's audio crosses the ocean, once each way. In `ap-south` (Mumbai), each turn would pay the India–US round trip three times: for the transcript, the LLM's first token and the first audio.
+
+**Restaurant data:** `DATA_SOURCE=sample` is the fastest choice for a public demo. Tool calls stay inside the agent, with no API or database round trip. Bookings last until the agent restarts or is redeployed.
+
+**Secrets:** LiveKit sets `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` itself and won't accept them as secrets. Put everything else in `agent/.env.production`, which git and the build upload both ignore:
+- the Deepgram, Groq and Google keys
+- `LLM_PROVIDER`, `GROQ_MODELS`, `GEMINI_MODEL` and `GEMINI_THINKING_LEVEL`
+- `MAX_CALL_SECONDS` and `SILENCE_CHECK_IN_SECONDS`
+- `DATA_SOURCE=sample`, or `DATA_SOURCE=api` with `API_BASE_URL` set to the web app's production URL and `AGENT_API_KEY`
+
+```sh
+cd agent
+docker build -t resassistant-agent .                                 # optional: check the image builds
+lk agent create --region us-east --secrets-file .env.production      # once: writes livekit.toml, builds, deploys
+lk agent deploy                                                      # after each change
+lk agent update-secrets --secrets-file .env.production --overwrite   # after changing a secret (restarts the agent)
+lk agent logs                                                        # the same latency lines as locally
+```
+
+Commit `livekit.toml`. It holds only the project subdomain and the agent id.
+
+**Cold starts:** on the Build plan, LiveKit scales the agent to zero once no call is running. The next call then waits 10–20 s before the agent joins the room. The image already contains compiled bytecode and the model weights, which keeps that wait short. A browser demo page should keep ringing for at least 40 s before it gives up. Paid plans keep the agent warm.
+
 ## Free-tier limits
 
 Groq's free tier allows **8,000 tokens per minute and 200,000 tokens per day per model**, and every request resends the prompt, facts and tool list (about 2,500 tokens). That is roughly three requests a minute and 80 a day per model, about 10–15 short calls. A day of heavy testing uses it up, and then every request goes to Gemini, which is much slower. For dependable sub-2-second replies, Groq's pay-as-you-go tier lifts these limits (see Groq's pricing page; short calls use a few thousand tokens). What keeps calls inside the free limits:

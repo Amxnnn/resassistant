@@ -1,0 +1,17 @@
+# Kept out of the image and out of LiveKit Cloud's build upload (which also skips .env.* and
+# anything .gitignore matches). Secrets reach the deployment with --secrets-file, never the image.
+.env
+.env.*
+.venv/
+.cache/
+.sample_state.json
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+tests/
+evals/
+integration/
+scripts/
+KMS/
+Dockerfile
+.dockerignore
