@@ -25,7 +25,7 @@ lk cloud auth               # once: links the lk CLI to your LiveKit Cloud proje
 
 `lk agent dev` registers under a random dev deployment so your test traffic stays separate. The turn detector runs on LiveKit Cloud in this mode and falls back to a local model if the cloud one is unreachable.
 
-Switch the LLM without touching code: set `LLM_PROVIDER=groq` (default) or `gemini` in `.env`, and choose models with `GROQ_MODEL` and `GEMINI_MODEL`.
+Switch the LLM without touching code: set `LLM_PROVIDER=groq` (default) or `gemini` in `.env`, and choose models with `GROQ_MODELS` (comma-separated, tried in order) and `GEMINI_MODEL`. `NOISE_CANCELLATION=off` turns off LiveKit's noise cancellation, for troubleshooting.
 
 ## Latency
 
@@ -41,6 +41,27 @@ turn 4 latency | total 742 ms | eou 210 | stt 140 | llm ttft 420 (openai/gpt-oss
 The log also shows each `caller:` and `agent:` line. When the caller cuts in, the agent's line is logged as `agent (INTERRUPTED, stopped after): ...` with only what was actually spoken. Barge-in needs at least two recognised words, so "no, wait" stops the agent but "mm-hmm", a cough or noise doesn't. If an interrupted line is followed by a `caller:` line repeating the agent's own words, the mic is picking up the speakers: use headphones.
 
 When the call ends, a summary line gives p50 and p95 for `total` and the median of each stage. To compare LLMs, make the same few calls with `LLM_PROVIDER=gemini` and then `groq`, and compare the summaries.
+
+[scripts/voice_benchmark.py](../agent/scripts/voice_benchmark.py) measures this over real audio. A scripted caller joins a LiveKit room, speaks five questions (a Deepgram voice, cached), and times the gap to the agent's first sound, while the agent's log gives the per-stage breakdown. Run the agent (and the web app), then `uv run python scripts/voice_benchmark.py`.
+
+### What makes replies fast
+
+- **One TTS piece per reply.** The whole reply goes to the TTS as one piece, and Deepgram starts on the first full sentence (first audio about 0.3 s after its last word). Until 29 Oct 2026, `Receptionist.llm_node` flushed after the first phrase to start a few words sooner, and the voice broke up in demo calls. LiveKit plays each flushed piece to the end before starting the next, and every Aura piece opens with 20–390 ms of silence, so replies paused mid-sentence and the intonation reset at the comma. A short first sentence, which the prompt asks for, keeps the start quick.
+- **Facts in the prompt instead of RAG.** The whole knowledge base (about 20 dishes and six info topics, ~500 tokens) is fetched once while the greeting plays ([facts.py](../agent/src/agent/facts.py)) and added to the prompt. Menu and info questions then take one LLM request and no API round trip. RAG would add a retrieval step for a corpus this small. Availability and bookings still go through tools, live.
+- **Early voice.** Preemptive generation starts the LLM, and the voice for its reply, before the caller's turn is confirmed.
+- **Two Groq models before Gemini.** Groq counts free limits per model, so `gpt-oss-120b` then `gpt-oss-20b` doubles the free budget; Gemini is the last resort.
+
+Measured with the benchmark on 24 Oct 2026, agent clock (caller stops → agent speaks), web app on Supabase in Tokyo:
+
+| Question | Before | After |
+|---|---|---|
+| Opening hours tomorrow | 3.4–7.6 s | 2.3–2.5 s |
+| Vegan dishes | 10.8 s | 1.3–1.4 s |
+| Parking | 13.5 s | 1.1–1.2 s |
+| Paneer tikka allergens | 14.9 s | 1.8–2.0 s |
+| Table on Tuesday (availability tool) | 22.8 s | 9.4–9.9 s |
+
+"Before" was dominated by the LLM: Groq had hit its free limits, so requests went to Gemini, which was taking 5–17 s. After the change, the slow case is the tool path: a ~1.4 s availability query to the database in Tokyo plus extra LLM requests, which on the free tier can hit Groq's per-minute limit. Callers hear about 1.3 s more than the agent clock because of network transit and audio buffering. These runs still split replies at the first phrase. They haven't been re-run since; the voice now also waits for the LLM to finish the first sentence.
 
 ### Week 1 LLM measurements (24 Oct 2026, free tiers, text-only, same prompt)
 
@@ -60,8 +81,19 @@ Tools in [tools.py](../agent/src/agent/tools.py):
 - **Bookings, changes and cancellations:** always two steps. A `prepare_*` tool checks the request and returns a read-back. `confirm_action` carries it out, but refuses to run in the same turn as the prepare, so the caller always gets to say yes first.
 - **Phone numbers:** when the phone line gives a caller ID, it's used and anything the LLM passes is ignored. Spoken numbers default to India (+91).
 - **Messages and hanging up:** `take_message` leaves a message for the manager (large parties, events, or a caller who wants a person); `end_call` hangs up after the goodbye.
+- **Days:** the LLM passes the day as the caller said it ("Tuesday", "tomorrow", "27th"), and `resolve_day` looks it up in the calendar the API sent at call start. Left to itself, the LLM sometimes turned "this Tuesday" into Sunday's date.
+- **Phone numbers by voice:** a text transform in front of TTS spaces out any run of 7 or more digits, so numbers are read digit by digit however the LLM wrote them.
 
-The prompt ([receptionist_en.md](../agent/src/agent/prompts/receptionist_en.md)) keeps the agent to restaurant topics and sets the speaking style. In browser calls, a quiet restaurant background and keyboard sounds while a tool works make it feel like a real front desk. Console mode has no background audio.
+### One id per conversation
+
+Every call gets a fresh id (`call_<32 hex>`, from `new_call_id()` in [tools.py](../agent/src/agent/tools.py)) when it starts. It's attached to:
+- every log line, next to the room name
+- every booking and message the call creates
+- the call log saved when the call ends ([call_log.py](../agent/src/agent/call_log.py)), which holds the transcript, outcome (booked, changed, cancelled, message_taken, answered or hung_up), latency per turn and channel
+
+So in the database each booking traces back to exactly one conversation (`reservations.call_id = calls.call_id`). Room names aren't used for this: console mode reuses one, and a test page can reuse a name it's given. Each call also runs in its own session with its own state, so two people calling at once can't see each other's pending booking or phone number; a unit test interleaves two such calls step by step.
+
+The prompt ([receptionist_en.md](../agent/src/agent/prompts/receptionist_en.md)) keeps the agent to restaurant topics and sets the speaking style. In browser calls, a quiet restaurant background makes it feel like a real front desk. There is no keyboard sound while the agent thinks: the background track plays 0.4 s behind (its buffer), so the typing landed on the first words of nearly every reply and the voice seemed to crackle. Console mode has no background audio.
 
 ## Restaurant data
 
@@ -89,24 +121,31 @@ uv run ruff format src/agent/api_client/models.py
 
 ## Running with the web app
 
-The agent and [web/](web.md) meet only over HTTP. To run both locally with a real Postgres (database mode; the web app's no-database seed mode can't change or cancel bookings and doesn't block double-booking):
+The agent and [web/](web.md) meet only over HTTP. The web app's data lives in Supabase (project region ap-northeast-1, Tokyo).
 
 ```sh
-# 1. Postgres in Docker, once (afterwards: docker start resassistant-pg)
-docker run -d --name resassistant-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=resassistant -p 5433:5432 postgres:17
-
-# 2. web/.env.local: the same AGENT_API_KEY as agent/.env, and
-#    DATABASE_URL=postgres://postgres:postgres@localhost:5433/resassistant
+# web/.env.local: the same AGENT_API_KEY as agent/.env, and DATABASE_URL set to Supabase's
+# *session pooler* (Project → Connect → Session pooler), e.g.
+#   postgresql://postgres.<project-ref>:<password>@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
+# The direct db.<project-ref>.supabase.co host is IPv6-only and fails on most home networks.
+# URL-encode special characters in the password (@ becomes %40).
 cd web
 pnpm install
+pnpm dev                       # http://localhost:3000, also the staff dashboard
+
+# agent/.env: DATA_SOURCE=api and API_BASE_URL=http://localhost:3000, then talk to it
+cd ../agent
+uv run python -m agent.main console
+```
+
+To work offline instead, run Postgres in Docker and point `DATABASE_URL` at it:
+
+```sh
+docker run -d --name resassistant-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=resassistant -p 5433:5432 postgres:17
+# DATABASE_URL=postgres://postgres:postgres@localhost:5433/resassistant, then from web/:
 pnpm drizzle-kit push --force
 docker exec -i resassistant-pg psql -U postgres -d resassistant < db/migrations/0000_reservations_exclusion.sql
 pnpm db:seed && git checkout -- db/seed-data.json   # the seed script rewrites this tracked file
-pnpm dev                                            # http://localhost:3000, also the staff dashboard
-
-# 3. agent/.env: DATA_SOURCE=api and API_BASE_URL=http://localhost:3000, then talk to it
-cd ../agent
-uv run python -m agent.main console
 ```
 
 Bookings, messages and call logs the agent makes show up in the dashboard at http://localhost:3000.
@@ -117,9 +156,58 @@ Bookings, messages and call logs the agent makes show up in the dashboard at htt
 uv run pytest integration -v
 ```
 
+[scripts/add_dummy_data.py](../agent/scripts/add_dummy_data.py) fills the web app with fictional test data through the same API: bookings across the coming week, next Saturday 7 PM full for parties of 3 or more, three manager messages, and call logs linked to their bookings by call id. Everything is marked "Dummy data" with 555-01xx numbers. `--remove` cancels the dummy bookings again.
+
+### Response times with Supabase
+
+Measured on 24 Oct 2026 from Bangalore, web app running locally, database in Tokyo (about 130 ms per round trip):
+
+| API call | Time | When the agent makes it |
+|---|---|---|
+| Restaurant settings | ~0.9 s | once, at call start |
+| Info, menu | ~0.6 s | a general or menu question |
+| Availability | ~1.4 s | checking a table |
+| Create booking | ~3.1 s | after the caller says yes |
+| Change booking | ~2.8 s | after the caller says yes |
+| Cancel | ~1.2 s | after the caller says yes |
+
+The time is mostly the web API making several database queries one after another, each paying the Tokyo round trip. The agent reuses an availability check from the last 90 seconds instead of repeating it when the caller books, and keyboard sounds play while a tool runs. The big wins are on the web side: a Supabase project in ap-south-1 (Mumbai), queries run in parallel or cached, and booking without re-running the full availability search.
+
+## Deploying to LiveKit Cloud
+
+The agent runs on LiveKit Cloud's free Build plan:
+- one deployment
+- 5 calls at once
+- 1,000 agent minutes a month. This is a hard cap: once it's used up, new calls fail and nothing is charged.
+
+LiveKit builds the image itself from `agent/` with the [Dockerfile](../agent/Dockerfile). The upload leaves out `.env*` files, anything in `.gitignore`, and anything in [.dockerignore](../agent/.dockerignore).
+
+**Region: `us-east` (Ashburn).** The region can't be changed after the agent is created. Every turn calls Deepgram (STT and TTS) and Groq, which are served from the US, so the agent sits next to them. Only the caller's audio crosses the ocean, once each way. In `ap-south` (Mumbai), each turn would pay the India–US round trip three times: for the transcript, the LLM's first token and the first audio.
+
+**Restaurant data:** `DATA_SOURCE=sample` is the fastest choice for a public demo. Tool calls stay inside the agent, with no API or database round trip. Bookings last until the agent restarts or is redeployed.
+
+**Secrets:** LiveKit sets `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` itself and won't accept them as secrets. Put everything else in `agent/.env.production`, which git and the build upload both ignore:
+- the Deepgram, Groq and Google keys
+- `LLM_PROVIDER`, `GROQ_MODELS`, `GEMINI_MODEL` and `GEMINI_THINKING_LEVEL`
+- `MAX_CALL_SECONDS` and `SILENCE_CHECK_IN_SECONDS`
+- `DATA_SOURCE=sample`, or `DATA_SOURCE=api` with `API_BASE_URL` set to the web app's production URL and `AGENT_API_KEY`
+
+```sh
+cd agent
+docker build -t resassistant-agent .                                 # optional: check the image builds
+lk agent create --region us-east --secrets-file .env.production      # once: writes livekit.toml, builds, deploys
+lk agent deploy                                                      # after each change
+lk agent update-secrets --secrets-file .env.production --overwrite   # after changing a secret (restarts the agent)
+lk agent logs                                                        # the same latency lines as locally
+```
+
+Commit `livekit.toml`. It holds only the project subdomain and the agent id.
+
+**Cold starts:** on the Build plan, LiveKit scales the agent to zero once no call is running. The next call then waits 10–20 s before the agent joins the room. The image already contains compiled bytecode and the model weights, which keeps that wait short. A browser demo page should keep ringing for at least 40 s before it gives up. Paid plans keep the agent warm.
+
 ## Free-tier limits
 
-Groq's free tier allows **8,000 tokens per minute** on `gpt-oss-20b`, and every request resends the prompt and the tool list (about 1,800 tokens). That is roughly four requests a minute. What keeps calls inside it:
+Groq's free tier allows **8,000 tokens per minute and 200,000 tokens per day per model**, and every request resends the prompt, facts and tool list (about 2,500 tokens). That is roughly three requests a minute and 80 a day per model, about 10–15 short calls. A day of heavy testing uses it up, and then every request goes to Gemini, which is much slower. For dependable sub-2-second replies, Groq's pay-as-you-go tier lifts these limits (see Groq's pricing page; short calls use a few thousand tokens). What keeps calls inside the free limits:
 - **Fallback:** when both `GROQ_API_KEY` and `GOOGLE_API_KEY` are set, a Groq rate limit hands the request to Gemini immediately instead of failing the turn. Two Gemini quirks are handled in [main.py](../agent/src/agent/main.py): tool calls Groq made get Google's documented stand-in thought signature, and each attempt gets 10 s, because Google rejects request deadlines under 10 s.
 - **Small requests:** a short prompt, an 8-day calendar, terse tool descriptions, short replies (under about 30 words), and at most one speculative (preemptive) LLM request per turn. A 600-token cap is only a runaway guard: reasoning tokens count against it, so a tighter cap cuts spoken answers off mid-sentence.
 - **Calls end on their own** ([call_limits.py](../agent/src/agent/call_limits.py)): after `SILENCE_CHECK_IN_SECONDS` of silence the agent asks "Are you still there?", and hangs up if the caller stays silent; no call runs past `MAX_CALL_SECONDS`. These lines are fixed text and cost no LLM requests.

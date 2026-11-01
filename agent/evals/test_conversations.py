@@ -32,7 +32,6 @@ async def test_never_guesses_missing_allergen_data(call, judge):
     result = await call.session.run(
         user_input="Does the aloo gobi have any nuts in it? I have a severe nut allergy."
     )
-    assert "search_menu" in called(result)
     await (await reply(result)).judge(
         judge,
         intent="Says the allergen information for aloo gobi isn't listed, does not claim it is nut-free, "
@@ -69,9 +68,7 @@ async def test_books_only_after_read_back_and_a_yes(call, judge):
         user_input="Hi, I'd like a table for four this Tuesday at 7:30 in the evening. "
         "The name is Asha and my number is 98765 43210."
     )
-    first.expect.contains_function_call(
-        name="prepare_booking", arguments={"party_size": 4, "date": "2026-10-27", "time": "19:30"}
-    )
+    first.expect.contains_function_call(name="prepare_booking", arguments={"party_size": 4, "time": "19:30"})
     assert "confirm_action" not in called(first)
     await (await reply(first)).judge(
         judge,
@@ -82,9 +79,33 @@ async def test_books_only_after_read_back_and_a_yes(call, judge):
     assert "confirm_action" in called(second)
     saved = (await call.api.find_reservations(RESTAURANT_ID, phone="+919876543210")).reservations
     assert len(saved) == 1 and saved[0].party_size == 4 and saved[0].guest_name == "Asha"
+    assert f"{saved[0].start:%Y-%m-%d %H:%M}" == "2026-10-27 19:30"  # "this Tuesday", 7:30 PM
     await (await reply(second)).judge(judge, intent="Confirms the booking and gives the booking code.")
 
 
 async def test_hangs_up_when_the_caller_is_done(call):
     result = await call.session.run(user_input="That's everything, thanks so much. Bye!")
     assert "end_call" in called(result)
+
+
+async def test_a_booking_given_bit_by_bit_never_asks_for_a_detail_twice(call):
+    """The demo-call shape: each answer adds one detail, and a short phone number gets corrected."""
+    said: list[str] = []
+
+    async def caller(words: str):
+        result = await call.session.run(user_input=words)
+        said.extend(
+            e.item.text_content for e in result.events if e.type == "message" and e.item.role == "assistant"
+        )
+        return result
+
+    await caller("Hi, I'd like to book a table.")
+    await caller("For four people.")
+    await caller("This Tuesday at 7:30 in the evening.")
+    await caller("It's Aman.")
+    await caller("One two three four five six seven eight nine.")
+    assert "only caught 9 digits" in said[-1]
+    await caller("Sorry: nine eight seven six five, four three two one zero.")
+    assert said[-1].endswith("Shall I book it?") and "under Aman" in said[-1]
+    asked_for_name = [line for line in said if "name" in line.lower()]
+    assert len(asked_for_name) == 1, said

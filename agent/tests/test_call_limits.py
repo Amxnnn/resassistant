@@ -95,11 +95,13 @@ async def test_hang_up_happens_once():
 class FakeSpeech:
     def __init__(self) -> None:
         self.callbacks = []
+        self.interrupted = False
 
     def add_done_callback(self, callback):
         self.callbacks.append(callback)
 
-    def finish(self):
+    def finish(self, *, interrupted: bool = False):
+        self.interrupted = interrupted
         for callback in self.callbacks:
             callback(self)
 
@@ -118,3 +120,30 @@ async def test_end_call_hangs_up_only_after_the_goodbye_has_played():
 
     session.emit("user_state_changed", state("away"))  # no check-ins once we're hanging up
     assert session.said == []
+
+
+async def test_cutting_into_the_goodbye_keeps_the_call_open():
+    # "Oh wait, one more thing" while the agent says goodbye: stay on the line.
+    session, job = FakeSession(), FakeJob()
+    limits = CallLimits(session, job, max_call_seconds=60)
+    goodbye = FakeSpeech()
+    limits.end_after(goodbye)
+    goodbye.finish(interrupted=True)
+    await asyncio.sleep(0)
+    assert not session.shut_down and not job.room_deleted
+
+    second = FakeSpeech()  # a later goodbye still hangs up
+    limits.end_after(second)
+    second.finish()
+    await asyncio.sleep(0)
+    assert session.shut_down and job.shutdown_reason == "caller finished"
+
+
+async def test_nothing_fires_once_the_call_is_over():
+    session, job = FakeSession(), FakeJob()
+    limits = CallLimits(session, job, max_call_seconds=0.05, silence_grace_seconds=0.01)
+    limits.start()
+    limits.stop()  # the caller hung up
+    session.emit("user_state_changed", state("away"))
+    await asyncio.sleep(0.1)
+    assert session.said == [] and not job.room_deleted and job.shutdown_reason is None

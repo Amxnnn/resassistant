@@ -24,9 +24,23 @@ def test_instructions_carry_the_calendar_scope_and_booking_rules(restaurant):
     assert "Only help with The Saffron Table" in text
     assert "2026-10-31" in text and "2026-11-01" not in text  # 8 days of calendar
     assert "Over 8 guests" in text
-    assert "and their phone number." in text
+    assert "never ask for it" not in text  # no caller ID: prepare_booking asks for the number
 
 
 def test_instructions_skip_asking_for_a_number_when_the_line_gives_it(restaurant):
     text = build_instructions(restaurant, caller_id_known=True)
-    assert "don't ask for it" in text
+    assert "You have their number from the phone line, so never ask for it." in text
+
+
+def test_the_lookup_rule_matches_the_tools_the_agent_still_has(restaurant):
+    before_facts = build_instructions(restaurant, caller_id_known=False)
+    assert "use get_restaurant_info or search_menu before saying you don't know" in before_facts
+    all_in_prompt = build_instructions(restaurant, caller_id_known=False, facts="Menu: ...", lookups=[])
+    assert "get_restaurant_info" not in all_in_prompt and "search_menu" not in all_in_prompt
+    assert "say you don't have that detail and offer to take a message" in all_in_prompt
+
+
+def test_booking_tools_speak_for_themselves(restaurant):
+    text = build_instructions(restaurant, caller_id_known=False)
+    assert "The booking tools talk to the caller themselves" in text
+    assert "It says goodbye and hangs up, so don't say goodbye yourself." in text

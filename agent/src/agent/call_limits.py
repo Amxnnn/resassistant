@@ -47,6 +47,15 @@ class CallLimits:
         self._timers.append(asyncio.create_task(self._end_at_time_limit(), name="call_time_limit"))
         self._session.on("close", lambda _ev: self._cancel_timers())
 
+    def stop(self) -> None:
+        """The call is over: no check-ins or hang-ups from here on.
+
+        Called when the job shuts down too, not only on the session's close event: LiveKit once took a
+        minute to close a session, and the time limit then "hung up" a call that had already ended.
+        """
+        self._ending = True
+        self._cancel_timers()
+
     def _on_user_state(self, ev: UserStateChangedEvent) -> None:
         if ev.new_state == "speaking" and self._silence:
             self._silence.cancel()  # they answered
@@ -77,11 +86,22 @@ class CallLimits:
             await self._disconnect(reason)
 
     def end_after(self, speech: SpeechHandle) -> None:
-        """Hang up once `speech` (the agent's goodbye) has finished playing. Used by end_call."""
+        """Hang up once `speech` (the agent's goodbye) has finished playing. Used by end_call.
+
+        If the caller cuts into the goodbye ("oh wait, one more thing"), the call stays open.
+        """
         if self._ending:
             return
         self._ending = True
-        speech.add_done_callback(lambda _: asyncio.create_task(self._disconnect("caller finished")))
+
+        def done(handle: SpeechHandle) -> None:
+            if handle.interrupted:
+                self._ending = False
+                logger.info("goodbye interrupted, staying on the call")
+                return
+            self._timers.append(asyncio.create_task(self._disconnect("caller finished")))
+
+        speech.add_done_callback(done)
 
     async def _disconnect(self, reason: str) -> None:
         logger.info("hanging up: %s", reason)

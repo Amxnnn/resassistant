@@ -14,8 +14,14 @@ import statistics
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from livekit.agents import AgentSession, ConversationItemAddedEvent
+from livekit.agents import (
+    AgentSession,
+    ConversationItemAddedEvent,
+    FunctionToolsExecutedEvent,
+    MetricsCollectedEvent,
+)
 from livekit.agents.llm import ChatMessage
+from livekit.agents.metrics import LLMMetrics
 
 logger = logging.getLogger("agent.metrics")
 
@@ -55,16 +61,47 @@ class Turn:
 
 @dataclass
 class LatencyTracker:
-    llm_model: str | None
+    llm_model: str | None  # the configured chain; each turn records the model that answered it
     turns: list[Turn] = field(default_factory=list)
     _pending_caller: ChatMessage | None = field(default=None, init=False, repr=False)
+    _answered_by: str | None = field(default=None, init=False, repr=False)
 
     def attach(self, session: AgentSession) -> None:
         session.on("conversation_item_added", self._on_item_added)
+        session.on("function_tools_executed", self._on_tools_executed)
+        session.on("metrics_collected", self._on_metrics)
 
     def _on_item_added(self, ev: ConversationItemAddedEvent) -> None:
         if isinstance(ev.item, ChatMessage):
             self.add_message(ev.item)
+
+    def _on_metrics(self, ev: MetricsCollectedEvent) -> None:
+        if isinstance(ev.metrics, LLMMetrics):
+            self.add_llm_request(ev.metrics)
+
+    def add_llm_request(self, m: LLMMetrics) -> None:
+        """One LLM request: which model answered (after any fallback) and its tokens, the budget the
+        free tiers limit per minute and per day."""
+        if m.cancelled:
+            return
+        self._answered_by = (m.metadata.model_name if m.metadata else None) or m.label
+        logger.info(
+            "llm request | %s | %d prompt + %d output tokens | first token %s ms",
+            self._answered_by,
+            m.prompt_tokens,
+            m.completion_tokens,
+            _ms(m.ttft) if m.ttft >= 0 else "-",
+        )
+
+    def _on_tools_executed(self, ev: FunctionToolsExecutedEvent) -> None:
+        """Tool calls add an API round trip and another LLM request to a turn: log what ran."""
+        ran = [
+            f"{call.name} {_ms(out.created_at - call.created_at)} ms"
+            for call, out in zip(ev.function_calls, ev.function_call_outputs, strict=False)
+            if out is not None
+        ]
+        if ran:
+            logger.info("tools: %s", ", ".join(ran))
 
     def add_message(self, msg: ChatMessage) -> Turn | None:
         if msg.role == "user":
@@ -83,7 +120,12 @@ class LatencyTracker:
             else:
                 logger.info("agent: %s", turn.text)
             if latency is not None:
-                logger.info(_format_turn(turn.index, latency))
+                # Time from LLM start to the first sentence reaching TTS: how long the voice waited for text.
+                ttfs = _ms(msg.metrics.get("llm_node_ttfs"))
+                logger.info(
+                    _format_turn(turn.index, latency)
+                    + ("" if ttfs is None else f" | first text to tts {ttfs}")
+                )
             return turn
         return None
 
@@ -110,7 +152,7 @@ class LatencyTracker:
             llm_ttft_ms=_ms(a.get("llm_node_ttft")),
             tts_ttfb_ms=_ms(a.get("tts_node_ttfb")),
             total_ms=total,
-            llm_model=self.llm_model,
+            llm_model=self._answered_by or self.llm_model,
         )
 
     def summary(self) -> dict[str, int | None]:

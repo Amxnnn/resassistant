@@ -1,0 +1,4 @@
+{
+  "prompt": "Origin: rendered, not generated. One idle-state frame of the live Three.js particle orb in app/_brand/orb.tsx (seed-random sphere, 124 latitude rows, camera z 4.4, fov 34), captured 2026-10-28 in headless Chrome (SwiftShader WebGL) from the landing page's closing orb at 1040 x 1040 px, read back with preserveDrawingBuffer and composited over pure black, then scaled to 720 x 720 and encoded as WebP (quality 80) with ffmpeg. Used as the orb's poster (pre-WebGL and no-WebGL fallback), shown with mix-blend-mode: screen so the black drops out.\n",
+  "createdAt": "2026-10-28T12:24:23.751Z"
+}
