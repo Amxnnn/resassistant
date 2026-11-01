@@ -13,6 +13,7 @@ import { Calls } from "../_dashboard/calls";
 import { Menu, dishCategories } from "../_dashboard/menu";
 import { Hours } from "../_dashboard/hours";
 import { BRAND, signOut } from "../_brand/brand";
+import { ThemeSwitch } from "../_brand/theme-switch";
 import { Insights } from "../_dashboard/insights";
 import { useDashboardMotion } from "../_dashboard/motion";
 import { SEATING_MINUTES, bookingCode, freeTable, sampleDashboard } from "../_dashboard/sample-data";
@@ -443,7 +444,8 @@ export default function DashboardPage() {
             <div className="clock-label">{RESTAURANT.city} time</div>
             {clock}
           </div>
-          <span style={{ display: "flex" }}>
+          <span style={{ display: "flex", alignItems: "center" }}>
+            <ThemeSwitch className="theme-switch-sm" />
             {refreshButton}
             <button type="button" className="icon-btn" onClick={signOut} aria-label="Sign out" title="Sign out">
               <LogOut size={16} />
@@ -457,6 +459,7 @@ export default function DashboardPage() {
           {workspace}
           <div className="mobile-bar-trail">
             {clock}
+            <ThemeSwitch className="theme-switch-sm" />
             {refreshButton}
           </div>
         </header>

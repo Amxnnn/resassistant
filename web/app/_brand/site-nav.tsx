@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { BRAND } from "./brand";
+import { ThemeSwitch } from "./theme-switch";
 
 // The mark: the orb drawn as a few rows of dots, smaller toward the rim.
 const DOTS: [number, number, number][] = [
@@ -29,6 +30,7 @@ export function SiteNav({ page }: { page: "home" | "demo" | "auth" }) {
         <span>{BRAND.name}</span>
       </Link>
       <nav className="site-nav-actions" aria-label="Site">
+        <ThemeSwitch />
         {page !== "auth" && (
           <Link href="/login" className="site-link">
             Staff sign in

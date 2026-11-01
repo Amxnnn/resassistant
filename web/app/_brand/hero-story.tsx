@@ -41,7 +41,10 @@ export function HeroStory() {
         const stage = el.querySelector<HTMLElement>(".story-stage")!;
         const copy = el.querySelector<HTMLElement>(".hero-copy")!;
         const phone = el.querySelector<HTMLElement>(".story-phone")!;
+        const caption = phone.querySelector("figcaption");
         const steps = el.querySelector<HTMLElement>(".story-steps")!;
+        // The phone centres in the space under the floating nav, not under the whole stage.
+        const navH = () => parseFloat(getComputedStyle(el).getPropertyValue("--nav-h")) || 72;
 
         gsap
           .timeline({
@@ -64,12 +67,14 @@ export function HeroStory() {
             phone,
             {
               x: () => -stage.clientWidth * 0.21,
-              y: () => (stage.clientHeight - phone.offsetHeight) / 2 - phone.offsetTop,
+              y: () => navH() + (stage.clientHeight - navH() - phone.offsetHeight) / 2 - phone.offsetTop,
               duration: STORY_START + 0.01,
               ease: "power2.inOut"
             },
             0
           )
+          // The note beside the phone gives its place to the steps as they slide in.
+          .to(caption, { autoAlpha: 0, duration: 0.05 }, 0.04)
           .fromTo(steps, { autoAlpha: 0, x: 40 }, { autoAlpha: 1, x: 0, duration: 0.05 }, 0.09)
           .to({}, { duration: 1 - STORY_START }, STORY_START);
 

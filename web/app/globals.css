@@ -67,7 +67,239 @@
   --sidebar-w: 256px;
   --tabbar-h: 52px;
 
+  /* Lights and glass the shell draws with. */
+  --glow-a: rgba(143, 58, 22, 0.26);
+  --glow-b: rgba(74, 28, 12, 0.2);
+  --mark-glow: 0 6px 14px -6px rgba(143, 58, 22, 0.8);
+  --nav-sel: linear-gradient(180deg, rgba(243, 239, 233, 0.12), rgba(243, 239, 233, 0.07));
+  --nav-sel-ring: inset 0 0 0 1px rgba(243, 239, 233, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --cell-sheen: rgba(255, 255, 255, 0.03);
+  --lens: rgba(243, 239, 233, 0.055);
+  --btn-glow: 0 8px 18px -10px rgba(228, 104, 44, 0.8);
+  --field: rgba(243, 239, 233, 0.06);
+  --seg-thumb-top: #352e2a;
+  --block-ring: rgba(243, 239, 233, 0.06);
+  --block-hover: rgba(243, 239, 233, 0.16);
+  --next-a: rgba(228, 104, 44, 0.4);
+  --next-b: rgba(228, 104, 44, 0.2);
+  --next-ink: #ffdcc6;
+  --viz-glow: rgba(143, 58, 22, 0.12);
+  --tip: rgba(24, 20, 19, 0.9);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --sheet-bg: rgba(14, 12, 11, 0.9);
+  --sheet-cell: rgba(243, 239, 233, 0.045);
+  --toast-bg: rgba(30, 26, 24, 0.9);
+
+  /* The public site's ground, which <html> paints too. */
+  --site-ground: #000000;
+  --site-scroll: #3a2a22;
+
+  /* The appearance switch. */
+  --switch-track: rgba(243, 239, 233, 0.16);
+  --switch-track-hover: rgba(243, 239, 233, 0.22);
+  --switch-ring: rgba(243, 239, 233, 0.08);
+  --switch-knob: #f3efe9;
+  --switch-knob-shadow: 0 3px 8px rgba(0, 0, 0, 0.45), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --switch-icon: #2a120a;
+  --switch-focus: #f4c3a0;
+
   color-scheme: dark;
+}
+
+/* Light: the same front desk at midday. Porcelain grouped ground, white cells, a glass sidebar,
+   the rust glow turned to daylight; rust still marks only now/next and the primary action. */
+:root[data-theme="light"] {
+  --bg: #f5f3f0;
+  --bg-sidebar: rgba(250, 248, 246, 0.72);
+  --bg-grouped: #f5f3f0;
+  --surface: #ffffff;
+  --fill: rgba(64, 48, 38, 0.07);
+  --fill-strong: rgba(64, 48, 38, 0.13);
+  --hover: rgba(64, 48, 38, 0.045);
+  --selected: rgba(64, 48, 38, 0.075);
+  --separator: rgba(64, 48, 38, 0.11);
+  --separator-strong: rgba(64, 48, 38, 0.2);
+  --ring: rgba(64, 48, 38, 0.07);
+  --bar: rgba(64, 48, 38, 0.075);
+  --past: rgba(64, 48, 38, 0.035);
+  --seg-thumb: #ffffff;
+  --material: rgba(250, 248, 246, 0.82);
+
+  --label: #1c1714;
+  --label-2: rgba(28, 23, 20, 0.7);
+  --label-3: rgba(28, 23, 20, 0.62);
+  --label-4: rgba(28, 23, 20, 0.3);
+
+  --tint: #b4491a;
+  --tint-fill: #b84e1b;
+  --tint-fill-hover: #a34316;
+  --tint-soft: rgba(228, 104, 44, 0.12);
+
+  --green: #1f7a3a;
+  --green-dot: #34c759;
+  --red: #c4161c;
+  --red-dot: #ff3b30;
+  --red-soft: rgba(255, 59, 48, 0.1);
+  --blue: #0a63c9;
+  --blue-dot: #0a84ff;
+  --indigo: #5b4bc4;
+  --indigo-dot: #5e5ce6;
+
+  --chart-rest: #cbc3bd;
+
+  --shadow-sheet: 0 24px 64px rgba(48, 28, 16, 0.18), 0 0 0 1px rgba(64, 48, 38, 0.07);
+  --shadow-thumb: 0 1px 3px rgba(48, 28, 16, 0.16), 0 0 0 0.5px rgba(48, 28, 16, 0.06);
+  --shadow-pop: 0 12px 32px rgba(48, 28, 16, 0.16), 0 0 0 1px rgba(64, 48, 38, 0.07);
+
+  --glow-a: rgba(240, 132, 74, 0.16);
+  --glow-b: rgba(246, 190, 150, 0.16);
+  --mark-glow: 0 6px 14px -6px rgba(180, 73, 26, 0.55);
+  --nav-sel: #ffffff;
+  --nav-sel-ring: 0 1px 2px rgba(48, 28, 16, 0.08), 0 0 0 1px rgba(64, 48, 38, 0.06);
+  --cell-sheen: transparent;
+  --lens: rgba(64, 48, 38, 0.045);
+  --btn-glow: 0 8px 18px -10px rgba(180, 73, 26, 0.6);
+  --field: rgba(64, 48, 38, 0.06);
+  --seg-thumb-top: #ffffff;
+  --block-ring: rgba(64, 48, 38, 0.06);
+  --block-hover: rgba(64, 48, 38, 0.12);
+  --next-a: rgba(228, 104, 44, 0.24);
+  --next-b: rgba(228, 104, 44, 0.1);
+  --next-ink: #8a3412;
+  --viz-glow: rgba(240, 132, 74, 0.1);
+  --tip: rgba(255, 255, 255, 0.92);
+  --scrim: rgba(28, 18, 12, 0.22);
+  --sheet-bg: rgba(248, 246, 244, 0.92);
+  --sheet-cell: #ffffff;
+  --toast-bg: rgba(255, 255, 255, 0.92);
+
+  --site-ground: #ffffff;
+  --site-scroll: #e2d8d0;
+
+  --switch-track: rgba(64, 48, 38, 0.15);
+  --switch-track-hover: rgba(64, 48, 38, 0.2);
+  --switch-ring: rgba(64, 48, 38, 0.1);
+  --switch-knob: #ffffff;
+  --switch-knob-shadow: 0 3px 8px rgba(48, 28, 16, 0.16), 0 1px 1px rgba(48, 28, 16, 0.08), 0 0 0 0.5px rgba(48, 28, 16, 0.06);
+  --switch-icon: #c4521f;
+  --switch-focus: #b4491a;
+
+  color-scheme: light;
+}
+
+/* ---------- Appearance switch ---------- */
+
+/* iOS's switch: the knob glides across on the site's one curve and stretches while pressed. Dark
+   is the default position, so without the boot script the switch still matches the page. */
+.theme-switch {
+  --w: 50px;
+  --h: 30px;
+  --k: 26px;
+  --travel: calc(var(--w) - var(--k) - 4px);
+  position: relative;
+  flex: none;
+  width: var(--w);
+  height: var(--h);
+  border-radius: 999px;
+  background: var(--switch-track);
+  box-shadow: inset 0 0 0 1px var(--switch-ring);
+  transition: background-color 300ms ease;
+  view-transition-name: theme-switch;
+}
+
+.theme-switch-sm {
+  --w: 44px;
+  --h: 26px;
+  --k: 22px;
+}
+
+/* A 44px target around the drawn switch. */
+.theme-switch::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--h) - 44px) / 2) -4px;
+}
+
+.theme-switch:hover {
+  background: var(--switch-track-hover);
+}
+
+.theme-switch:focus-visible {
+  outline: 2px solid var(--switch-focus);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.theme-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: var(--k);
+  height: var(--k);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--switch-knob);
+  box-shadow: var(--switch-knob-shadow);
+  color: var(--switch-icon);
+  transform: translateX(var(--travel));
+  transition:
+    transform 420ms var(--ease-out),
+    width 240ms var(--ease-out),
+    background-color 300ms ease;
+}
+
+.theme-switch:active .theme-switch-knob {
+  width: calc(var(--k) + 6px);
+  transform: translateX(calc(var(--travel) - 6px));
+}
+
+:root[data-theme="light"] .theme-switch-knob,
+:root[data-theme="light"] .theme-switch:active .theme-switch-knob {
+  transform: translateX(0);
+}
+
+.theme-switch-sun,
+.theme-switch-moon {
+  grid-area: 1 / 1;
+  transition: opacity 240ms ease, transform 480ms var(--ease-out);
+}
+
+.theme-switch-sun {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.5);
+}
+
+:root[data-theme="light"] .theme-switch-sun {
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="light"] .theme-switch-moon {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.5);
+}
+
+.theme-switch-sm .theme-switch-sun,
+.theme-switch-sm .theme-switch-moon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The page cross-fades between themes; the switch is lifted out so its knob keeps sliding live. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-group(theme-switch),
+::view-transition-new(theme-switch) {
+  animation: none;
+}
+
+::view-transition-old(theme-switch) {
+  display: none;
 }
 
 /* ---------- Base ---------- */
@@ -180,8 +412,8 @@ a {
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100dvh;
   background:
-    radial-gradient(70% 45% at 0% 0%, rgba(143, 58, 22, 0.26), transparent 70%),
-    radial-gradient(50% 40% at 100% 0%, rgba(74, 28, 12, 0.2), transparent 70%),
+    radial-gradient(70% 45% at 0% 0%, var(--glow-a), transparent 70%),
+    radial-gradient(50% 40% at 100% 0%, var(--glow-b), transparent 70%),
     var(--bg);
   background-attachment: fixed;
 }
@@ -215,7 +447,7 @@ a {
   display: grid;
   place-items: center;
   background: linear-gradient(145deg, #d86a2e, #8f3a16);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 14px -6px rgba(143, 58, 22, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), var(--mark-glow);
   color: var(--on-tint);
   font-size: 12px;
   font-weight: 700;
@@ -302,8 +534,8 @@ a {
 }
 
 .nav-selection {
-  background: linear-gradient(180deg, rgba(243, 239, 233, 0.12), rgba(243, 239, 233, 0.07));
-  box-shadow: inset 0 0 0 1px rgba(243, 239, 233, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--nav-sel);
+  box-shadow: var(--nav-sel-ring);
 }
 
 .nav-lens {
@@ -440,7 +672,7 @@ a {
   isolation: isolate;
   background: var(--surface);
   border-radius: var(--radius-group);
-  box-shadow: inset 0 0 0 1px var(--ring), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px var(--ring), inset 0 1px 0 var(--cell-sheen);
   overflow: hidden;
 }
 
@@ -452,7 +684,7 @@ a {
   right: 0;
   z-index: 0;
   height: 0;
-  background: rgba(243, 239, 233, 0.055);
+  background: var(--lens);
   opacity: 0;
   pointer-events: none;
 }
@@ -742,7 +974,7 @@ a.row:active {
   background: linear-gradient(180deg, #c45722, var(--tint-fill));
   color: var(--on-tint);
   font-weight: 600;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 8px 18px -10px rgba(228, 104, 44, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), var(--btn-glow);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -829,7 +1061,7 @@ a.row:active {
   height: 40px;
   padding: 0 14px;
   border-radius: 12px;
-  background: rgba(243, 239, 233, 0.06);
+  background: var(--field);
   box-shadow: inset 0 0 0 1px var(--ring);
   color: var(--label-3);
   transition: box-shadow 200ms ease;
@@ -869,7 +1101,7 @@ a.row:active {
   display: inline-flex;
   padding: 3px;
   border-radius: 12px;
-  background: rgba(243, 239, 233, 0.06);
+  background: var(--field);
   box-shadow: inset 0 0 0 1px var(--ring);
   vertical-align: middle;
 }
@@ -880,7 +1112,7 @@ a.row:active {
   bottom: 3px;
   left: 0;
   border-radius: 9px;
-  background: linear-gradient(180deg, #352e2a, var(--seg-thumb));
+  background: linear-gradient(180deg, var(--seg-thumb-top), var(--seg-thumb));
   box-shadow: var(--shadow-thumb);
   transition: transform 420ms var(--ease-spring), width 300ms var(--ease-out);
 }
@@ -1306,7 +1538,7 @@ a.row:active {
   padding: 0 8px;
   border-radius: 8px;
   background: var(--bar);
-  box-shadow: inset 0 0 0 1px rgba(243, 239, 233, 0.06);
+  box-shadow: inset 0 0 0 1px var(--block-ring);
   font-size: 12px;
   font-weight: 500;
   color: var(--label);
@@ -1317,7 +1549,7 @@ a.row:active {
 }
 
 .floor-booking:hover {
-  background: rgba(243, 239, 233, 0.16);
+  background: var(--block-hover);
   transform: translateY(-1px);
 }
 
@@ -1338,13 +1570,13 @@ a.row:active {
 }
 
 .floor-booking.is-next {
-  background: linear-gradient(90deg, rgba(228, 104, 44, 0.4), rgba(228, 104, 44, 0.2));
-  color: #ffdcc6;
+  background: linear-gradient(90deg, var(--next-a), var(--next-b));
+  color: var(--next-ink);
   box-shadow: inset 0 0 0 1px rgba(228, 104, 44, 0.6);
 }
 
 .floor-booking.is-next em {
-  color: #ffdcc6;
+  color: var(--next-ink);
 }
 
 .floor-now {
@@ -1521,7 +1753,7 @@ a.row:active {
   aspect-ratio: 2.3 / 1;
   min-height: 300px;
   outline: none;
-  background: radial-gradient(ellipse 60% 55% at 50% 88%, rgba(143, 58, 22, 0.12), transparent 70%);
+  background: radial-gradient(ellipse 60% 55% at 50% 88%, var(--viz-glow), transparent 70%);
   touch-action: pan-y;
 }
 
@@ -1593,7 +1825,7 @@ a.row:active {
   z-index: 2;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(24, 20, 19, 0.9);
+  background: var(--tip);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   backdrop-filter: blur(14px) saturate(160%);
   box-shadow: var(--shadow-pop);
@@ -2041,7 +2273,7 @@ a.row:active {
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   animation: fade-in 240ms ease both;
@@ -2056,7 +2288,7 @@ a.row:active {
   width: min(440px, calc(100vw - 20px));
   display: flex;
   flex-direction: column;
-  background: rgba(14, 12, 11, 0.9);
+  background: var(--sheet-bg);
   -webkit-backdrop-filter: blur(40px) saturate(160%);
   backdrop-filter: blur(40px) saturate(160%);
   border-radius: var(--radius-sheet);
@@ -2106,7 +2338,7 @@ a.row:active {
 }
 
 .sheet .group {
-  background: rgba(243, 239, 233, 0.045);
+  background: var(--sheet-cell);
 }
 
 .sheet-head-title {
@@ -2252,7 +2484,7 @@ a.row:active {
   max-width: min(440px, calc(100vw - 32px));
   padding: 11px 18px;
   border-radius: 999px;
-  background: rgba(30, 26, 24, 0.9);
+  background: var(--toast-bg);
   -webkit-backdrop-filter: blur(24px) saturate(150%);
   backdrop-filter: blur(24px) saturate(150%);
   color: var(--label);
@@ -3118,12 +3350,11 @@ button.call-key-btn:active:not(:disabled) {
 
 html:has(.site),
 body:has(.site) {
-  background: #000000;
-  color-scheme: dark;
+  background: var(--site-ground);
 }
 
 html:has(.site) {
-  scrollbar-color: #3a2a22 #000000;
+  scrollbar-color: var(--site-scroll) var(--site-ground);
 }
 
 .site {
@@ -3142,9 +3373,35 @@ html:has(.site) {
   --gutter: clamp(16px, 4vw, 56px);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+  --hair-strong: rgba(243, 239, 233, 0.26);
+  --veil: rgba(243, 239, 233, 0.06);
+  --veil-strong: rgba(243, 239, 233, 0.12);
+  --veil-focus: rgba(243, 239, 233, 0.08);
+  --focus: var(--peach);
+  --selection: rgba(228, 104, 44, 0.45);
+  --selection-ink: #ffffff;
+  --pill-1: #f3efe9;
+  --pill-1-ink: #0c0807;
+  --pill-1-hover: #ffffff;
+  --pill-2: #0d0a09;
+  --pill-2-ring: rgba(243, 239, 233, 0.2);
+  --pill-2-hover: #1a1310;
+  --pill-2-ring-hover: rgba(243, 239, 233, 0.34);
+  --pill-off: rgba(243, 239, 233, 0.14);
+  --pill-off-ink: rgba(243, 239, 233, 0.56);
+  --nav-fade: rgba(0, 0, 0, 0.74);
+  --reject-ring: rgba(243, 239, 233, 0.5);
+  --word-ghost: rgba(243, 239, 233, 0.12);
+  /* Stage light as channels, so each glow keeps its own strength; --glow-k scales them all. */
+  --glow-1: 143 58 22;
+  --glow-2: 74 28 12;
+  --halo-1: 180 73 26;
+  --halo-2: 110 42 16;
+  --glow-k: 1;
+
   min-height: 100dvh;
   overflow-x: clip;
-  background: #000000;
+  background: var(--site-ground);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 16px;
@@ -3154,13 +3411,48 @@ html:has(.site) {
   caret-color: var(--orange);
 }
 
+/* Light: the same stage at midday. White ground, the rust glow turned to apricot daylight, warm
+   near-black ink, and the pills swapped so the action is still the strongest thing on the page. */
+:root[data-theme="light"] .site {
+  --ink: #17120f;
+  --ink-2: rgba(23, 18, 15, 0.72);
+  --ink-3: rgba(23, 18, 15, 0.6);
+  --hair: rgba(23, 18, 15, 0.11);
+  --hair-strong: rgba(23, 18, 15, 0.24);
+  --veil: rgba(23, 18, 15, 0.045);
+  --veil-strong: rgba(23, 18, 15, 0.08);
+  --veil-focus: #ffffff;
+  --focus: #b4491a;
+  --selection: rgba(228, 104, 44, 0.24);
+  --selection-ink: #17120f;
+  --pill-1: #17120f;
+  --pill-1-ink: #fbf8f5;
+  --pill-1-hover: #000000;
+  --pill-2: #ffffff;
+  --pill-2-ring: rgba(23, 18, 15, 0.16);
+  --pill-2-hover: #f7f4f1;
+  --pill-2-ring-hover: rgba(23, 18, 15, 0.3);
+  --pill-off: rgba(23, 18, 15, 0.08);
+  --pill-off-ink: rgba(23, 18, 15, 0.45);
+  --nav-fade: rgba(255, 255, 255, 0.66);
+  --reject-ring: rgba(23, 18, 15, 0.4);
+  --word-ghost: rgba(23, 18, 15, 0.08);
+  --glow-1: 240 126 64;
+  --glow-2: 247 186 142;
+  --halo-1: 232 112 52;
+  --halo-2: 246 180 134;
+  --glow-k: 0.62;
+
+  caret-color: #c4521f;
+}
+
 .site ::selection {
-  background: rgba(228, 104, 44, 0.45);
-  color: #ffffff;
+  background: var(--selection);
+  color: var(--selection-ink);
 }
 
 .site :focus-visible {
-  outline: 2px solid var(--peach);
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
   border-radius: 8px;
 }
@@ -3244,23 +3536,23 @@ html:has(.site) {
 }
 
 .pill-light {
-  background: var(--ink);
-  color: #0c0807;
+  background: var(--pill-1);
+  color: var(--pill-1-ink);
 }
 
 .pill-light:hover:not(:disabled) {
-  background: #ffffff;
+  background: var(--pill-1-hover);
 }
 
 .pill-dark {
-  background: #0d0a09;
+  background: var(--pill-2);
   color: var(--ink);
-  box-shadow: inset 0 0 0 1px rgba(243, 239, 233, 0.2);
+  box-shadow: inset 0 0 0 1px var(--pill-2-ring);
 }
 
 .pill-dark:hover {
-  background: #1a1310;
-  box-shadow: inset 0 0 0 1px rgba(243, 239, 233, 0.34);
+  background: var(--pill-2-hover);
+  box-shadow: inset 0 0 0 1px var(--pill-2-ring-hover);
 }
 
 .pill-sm {
@@ -3280,8 +3572,8 @@ html:has(.site) {
 
 .pill-light:disabled {
   opacity: 1;
-  background: rgba(243, 239, 233, 0.14);
-  color: rgba(243, 239, 233, 0.56);
+  background: var(--pill-off);
+  color: var(--pill-off-ink);
 }
 
 .ctas {
@@ -3302,7 +3594,7 @@ html:has(.site) {
   justify-content: space-between;
   gap: 16px;
   padding-inline: var(--gutter);
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.74), rgba(0, 0, 0, 0));
+  background: linear-gradient(to bottom, var(--nav-fade), transparent);
   pointer-events: none;
 }
 
@@ -3353,7 +3645,7 @@ html:has(.site) {
   flex-direction: column;
   align-items: center;
   padding: calc(var(--nav-h) + clamp(24px, 5vh, 64px)) var(--gutter) 0;
-  background: radial-gradient(64% 54% at 50% 0%, rgba(143, 58, 22, 0.62), rgba(74, 28, 12, 0.28) 48%, transparent 78%), #000000;
+  background: radial-gradient(64% 54% at 50% 0%, rgb(var(--glow-1) / calc(0.62 * var(--glow-k))), rgb(var(--glow-2) / calc(0.28 * var(--glow-k))) 48%, transparent 78%), var(--site-ground);
 }
 
 .hero-copy {
@@ -3423,7 +3715,7 @@ html:has(.site) {
   width: 200%;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  background: radial-gradient(closest-side, rgba(180, 73, 26, 0.36), rgba(110, 42, 16, 0.14) 55%, transparent 100%);
+  background: radial-gradient(closest-side, rgb(var(--halo-1) / calc(0.36 * var(--glow-k))), rgb(var(--halo-2) / calc(0.14 * var(--glow-k))) 55%, transparent 100%);
   pointer-events: none;
 }
 
@@ -3447,6 +3739,19 @@ html:has(.site) {
   font-size: 13px;
   color: var(--ink-3);
   text-align: center;
+}
+
+/* Where there is room, the note sits beside the phone instead of under it, so the phone keeps its
+   full height on the stage and clears the nav. */
+@media (min-width: 900px) {
+  .story-phone figcaption {
+    position: absolute;
+    left: calc(100% + 28px);
+    bottom: 16%;
+    width: max-content;
+    max-width: 21ch;
+    text-align: left;
+  }
 }
 
 .story-steps {
@@ -3482,7 +3787,7 @@ html:has(.site) {
 
 @media (min-width: 1100px) {
   .story-phone {
-    --phone-w: min(380px, max(320px, 25vw), max(290px, calc((100svh - 110px) / 2.1)));
+    --phone-w: min(380px, max(320px, 25vw), max(290px, calc((100svh - 150px) / 2.1)));
   }
 }
 
@@ -3960,7 +4265,7 @@ html:has(.site) {
 }
 
 @keyframes bar-reject {
-  0% { translate: 0; box-shadow: inset 0 0 0 1.5px rgba(243, 239, 233, 0.5); color: var(--ink); text-decoration-color: transparent; }
+  0% { translate: 0; box-shadow: inset 0 0 0 1.5px var(--reject-ring); color: var(--ink); text-decoration-color: transparent; }
   20% { translate: -6px 0; }
   40% { translate: 5px 0; }
   60% { translate: -3px 0; }
@@ -3980,7 +4285,7 @@ html:has(.site) {
 .close {
   position: relative;
   padding-top: clamp(64px, 8vw, 120px);
-  background: radial-gradient(70% 50% at 50% 62%, rgba(143, 58, 22, 0.42), rgba(74, 28, 12, 0.16) 50%, transparent 80%);
+  background: radial-gradient(70% 50% at 50% 62%, rgb(var(--glow-1) / calc(0.42 * var(--glow-k))), rgb(var(--glow-2) / calc(0.16 * var(--glow-k))) 50%, transparent 80%);
 }
 
 .close-stage {
@@ -4080,7 +4385,7 @@ html:has(.site) {
   position: relative;
   overflow: hidden;
   padding-top: clamp(80px, 9vw, 128px);
-  background: radial-gradient(90% 55% at 50% 100%, rgba(143, 58, 22, 0.42), rgba(74, 28, 12, 0.16) 50%, transparent 82%), #000000;
+  background: radial-gradient(90% 55% at 50% 100%, rgb(var(--glow-1) / calc(0.42 * var(--glow-k))), rgb(var(--glow-2) / calc(0.16 * var(--glow-k))) 50%, transparent 82%), var(--site-ground);
 }
 
 .footer-top {
@@ -4177,7 +4482,7 @@ html:has(.site) {
   line-height: 1;
   letter-spacing: -0.005em;
   white-space: nowrap;
-  color: rgba(243, 239, 233, 0.12);
+  color: var(--word-ghost);
   user-select: none;
   transition: opacity 1s ease;
 }
@@ -4248,7 +4553,7 @@ html:has(.site) {
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink-2);
-  background: rgba(243, 239, 233, 0.06);
+  background: var(--veil);
   box-shadow: inset 0 0 0 1px var(--hair);
   text-wrap: pretty;
 }
@@ -4283,7 +4588,7 @@ html:has(.site) {
   width: 200%;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  background: radial-gradient(closest-side, rgba(180, 73, 26, 0.36), rgba(110, 42, 16, 0.14) 55%, transparent 100%);
+  background: radial-gradient(closest-side, rgb(var(--halo-1) / calc(0.36 * var(--glow-k))), rgb(var(--halo-2) / calc(0.14 * var(--glow-k))) 55%, transparent 100%);
   pointer-events: none;
 }
 
@@ -4316,14 +4621,14 @@ html:has(.site) {
   line-height: 1.35;
   text-align: left;
   color: var(--ink);
-  background: rgba(243, 239, 233, 0.06);
+  background: var(--veil);
   box-shadow: inset 0 0 0 1px var(--hair);
   transition: background-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
 }
 
 .ask:hover:not(:disabled) {
-  background: rgba(243, 239, 233, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(243, 239, 233, 0.26);
+  background: var(--veil-strong);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
 }
 
 .ask:disabled {
@@ -4347,7 +4652,7 @@ html:has(.site) {
 .auth {
   display: flex;
   flex-direction: column;
-  background: radial-gradient(60% 46% at 50% 0%, rgba(143, 58, 22, 0.5), rgba(74, 28, 12, 0.18) 50%, transparent 78%), #000000;
+  background: radial-gradient(60% 46% at 50% 0%, rgb(var(--glow-1) / calc(0.5 * var(--glow-k))), rgb(var(--glow-2) / calc(0.18 * var(--glow-k))) 50%, transparent 78%), var(--site-ground);
 }
 
 .auth-main {
@@ -4402,7 +4707,7 @@ html:has(.site) {
   padding: 0 18px;
   border: 0;
   border-radius: 16px;
-  background: rgba(243, 239, 233, 0.06);
+  background: var(--veil);
   box-shadow: inset 0 0 0 1px var(--hair);
   color: var(--ink);
   font-size: 16px;
@@ -4415,8 +4720,8 @@ html:has(.site) {
 }
 
 .auth-field input:focus {
-  background: rgba(243, 239, 233, 0.08);
-  box-shadow: inset 0 0 0 1.5px var(--peach);
+  background: var(--veil-focus);
+  box-shadow: inset 0 0 0 1.5px var(--focus);
 }
 
 .auth-field:has(.auth-peek) input {
@@ -4437,7 +4742,7 @@ html:has(.site) {
 
 .auth-peek:hover {
   color: var(--ink);
-  background: rgba(243, 239, 233, 0.07);
+  background: var(--veil);
 }
 
 .auth-form .pill {
@@ -4597,4 +4902,187 @@ html:has(.site) {
   .band-track[aria-hidden] {
     display: none;
   }
+}
+
+/* ---------- Public site: light ---------- */
+
+/* The outcome slabs keep the dark page's logic, inverted: two rust slabs lit from a corner (ending
+   in deep rust rather than black, so they read as objects on white), one ink slab where the paper
+   slab was, and the hand-off slab in quiet porcelain. */
+:root[data-theme="light"] .outcome.is-booked {
+  background: radial-gradient(130% 120% at 0% 100%, #c4521f 0%, #a8441a 30%, #7e300f 62%, #5a200b 100%);
+  color: #fff8f3;
+}
+
+:root[data-theme="light"] .outcome.is-message {
+  background: radial-gradient(130% 120% at 100% 100%, #c4521f 0%, #a8441a 32%, #7e300f 64%, #5a200b 100%);
+  color: #fff8f3;
+}
+
+:root[data-theme="light"] .outcome.is-answered {
+  background: #17120f;
+  color: #f3efe9;
+}
+
+:root[data-theme="light"] .outcome.is-answered .outcome-body {
+  color: rgba(243, 239, 233, 0.72);
+}
+
+:root[data-theme="light"] .outcome.is-answered::after {
+  background: radial-gradient(380px circle at var(--mx) var(--my), rgba(255, 238, 226, 0.12), transparent 65%);
+}
+
+:root[data-theme="light"] .outcome.is-handoff {
+  background:
+    radial-gradient(90% 80% at 100% 0%, rgba(247, 186, 142, 0.4), rgba(247, 186, 142, 0.1) 45%, transparent 72%),
+    #f5f2ef;
+}
+
+:root[data-theme="light"] .outcome-rings i {
+  border-color: rgba(23, 18, 15, 0.2);
+}
+
+:root[data-theme="light"] .outcome-rings i.ripple {
+  border-color: rgba(196, 82, 31, 0.5);
+}
+
+:root[data-theme="light"] .race {
+  background:
+    radial-gradient(120% 90% at 0% 100%, rgba(240, 126, 64, 0.26), rgba(247, 186, 142, 0.14) 42%, transparent 72%),
+    #f7f5f2;
+}
+
+:root[data-theme="light"] .race-bar.is-won {
+  background: #f0a06c;
+}
+
+:root[data-theme="light"] .race-bar.is-lost {
+  color: #a8441a;
+}
+
+:root[data-theme="light"] .race-code {
+  color: #9a3d15;
+  background: rgba(228, 104, 44, 0.13);
+}
+
+/* The drawn iPhone follows the theme: its screen goes to iOS light, while the hardware (titanium
+   band, black bezel, Dynamic Island) stays as it is, and its shadow lightens for the bright page. */
+:root[data-theme="light"] .iphone {
+  color: #17120f;
+}
+
+:root[data-theme="light"] .iphone-screen {
+  background: radial-gradient(120% 55% at 50% 30%, #fde8da 0%, #fbf7f3 58%, #f6f3f0 100%);
+}
+
+:root[data-theme="light"] .iphone-home {
+  background: rgba(0, 0, 0, 0.82);
+}
+
+:root[data-theme="light"] .iphone :focus-visible {
+  outline-color: #b4491a;
+}
+
+:root[data-theme="light"] .call-name {
+  color: #17120f;
+}
+
+:root[data-theme="light"] .call-meta {
+  color: rgba(23, 18, 15, 0.6);
+}
+
+:root[data-theme="light"] .call-line.is-caller {
+  background: rgba(23, 18, 15, 0.075);
+  color: rgba(23, 18, 15, 0.92);
+}
+
+:root[data-theme="light"] .call-line.is-check {
+  color: rgba(23, 18, 15, 0.7);
+  background: rgba(23, 18, 15, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(23, 18, 15, 0.08);
+}
+
+:root[data-theme="light"] .call-tag {
+  color: rgba(23, 18, 15, 0.6);
+}
+
+:root[data-theme="light"] .call-empty {
+  color: rgba(23, 18, 15, 0.64);
+}
+
+:root[data-theme="light"] .call-key {
+  color: rgba(23, 18, 15, 0.78);
+}
+
+:root[data-theme="light"] .call-key-btn.is-glass {
+  background: rgba(23, 18, 15, 0.08);
+  color: #17120f;
+}
+
+:root[data-theme="light"] .call-key-btn.is-glass[aria-pressed="true"] {
+  background: #17120f;
+  color: #ffffff;
+}
+
+:root[data-theme="light"] .call-alert {
+  background: rgba(23, 18, 15, 0.06);
+  color: rgba(23, 18, 15, 0.85);
+}
+
+:root[data-theme="light"] .call-alert.is-error {
+  background: rgba(255, 59, 48, 0.12);
+}
+
+:root[data-theme="light"] .call-sound {
+  background: #17120f;
+  color: #ffffff;
+}
+
+:root[data-theme="light"] .call-compose {
+  background: linear-gradient(180deg, #ffffff, #f7f4f1);
+  box-shadow: inset 0 0 0 1px rgba(23, 18, 15, 0.1);
+}
+
+:root[data-theme="light"] .call-compose:focus-within {
+  box-shadow: inset 0 0 0 1px rgba(196, 82, 31, 0.55), 0 0 0 calc(var(--pt) * 4) rgba(228, 104, 44, 0.14);
+}
+
+:root[data-theme="light"] .call-compose input {
+  color: #17120f;
+  caret-color: #c4521f;
+}
+
+:root[data-theme="light"] .call-compose input::placeholder {
+  color: rgba(23, 18, 15, 0.56);
+}
+
+:root[data-theme="light"] .call-compose button:disabled {
+  background: rgba(23, 18, 15, 0.07);
+  color: rgba(23, 18, 15, 0.38);
+}
+
+:root[data-theme="light"] .iphone-body {
+  box-shadow:
+    0 calc(var(--pt) * 44) calc(var(--pt) * 80) calc(var(--pt) * -12) rgba(72, 36, 18, 0.34),
+    0 calc(var(--pt) * 8) calc(var(--pt) * 20) rgba(72, 36, 18, 0.16),
+    inset 0 0 0 calc(var(--pt) * 0.8) rgba(255, 255, 255, 0.18);
+}
+
+/* In light mode every orb is inked by its dots instead of lit by them (orb.tsx); its poster frame
+   follows: inverted, hue turned back, and multiplied so the white drops out. */
+:root[data-theme="light"] .orb-poster {
+  filter: invert(1) hue-rotate(180deg) saturate(1.3);
+  mix-blend-mode: multiply;
+}
+
+/* The suggested questions wait at half strength until the call connects; ink on white loses more
+   than ink on black, so light mode holds them a little stronger to stay readable. */
+:root[data-theme="light"] .ask:disabled {
+  opacity: 0.72;
+}
+
+/* The budget label sits among the bar caps, which are dark ink in light mode: a halo in the cell's
+   own white keeps a cap from striking through it. */
+:root[data-theme="light"] .viz-budget {
+  text-shadow: 0 0 1px var(--surface), 0 0 2px var(--surface), 0 0 4px var(--surface), 0 0 6px var(--surface);
 }
