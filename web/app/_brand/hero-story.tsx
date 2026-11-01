@@ -41,7 +41,6 @@ export function HeroStory() {
         const stage = el.querySelector<HTMLElement>(".story-stage")!;
         const copy = el.querySelector<HTMLElement>(".hero-copy")!;
         const phone = el.querySelector<HTMLElement>(".story-phone")!;
-        const caption = phone.querySelector("figcaption");
         const steps = el.querySelector<HTMLElement>(".story-steps")!;
         // The phone centres in the space under the floating nav, not under the whole stage.
         const navH = () => parseFloat(getComputedStyle(el).getPropertyValue("--nav-h")) || 72;
@@ -73,8 +72,6 @@ export function HeroStory() {
             },
             0
           )
-          // The note beside the phone gives its place to the steps as they slide in.
-          .to(caption, { autoAlpha: 0, duration: 0.05 }, 0.04)
           .fromTo(steps, { autoAlpha: 0, x: 40 }, { autoAlpha: 1, x: 0, duration: 0.05 }, 0.09)
           .to({}, { duration: 1 - STORY_START }, STORY_START);
 
@@ -117,7 +114,6 @@ export function HeroStory() {
           <div className="story-device" aria-hidden="true">
             <SampleCall step={step} />
           </div>
-          <figcaption>A scripted sample call. The restaurant and the guest are made up.</figcaption>
         </figure>
 
         <div id="how" className="story-steps">

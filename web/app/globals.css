@@ -3734,26 +3734,6 @@ html:has(.site) {
   }
 }
 
-.story-phone figcaption {
-  max-width: 32ch;
-  font-size: 13px;
-  color: var(--ink-3);
-  text-align: center;
-}
-
-/* Where there is room, the note sits beside the phone instead of under it, so the phone keeps its
-   full height on the stage and clears the nav. */
-@media (min-width: 900px) {
-  .story-phone figcaption {
-    position: absolute;
-    left: calc(100% + 28px);
-    bottom: 16%;
-    width: max-content;
-    max-width: 21ch;
-    text-align: left;
-  }
-}
-
 .story-steps {
   width: min(1240px, 100%);
   padding: clamp(72px, 10vw, 120px) 0 clamp(48px, 6vw, 72px);
