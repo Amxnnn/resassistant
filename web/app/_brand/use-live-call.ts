@@ -38,8 +38,9 @@ const TOPIC_TRANSCRIPTION = "lk.transcription";
 const TOPIC_CHAT = "lk.chat";
 const SEGMENT_ID = "lk.segment_id";
 const FINAL = "lk.transcription_final";
-// How long to wait for the agent to join before telling the caller nobody picked up.
-const PICKUP_TIMEOUT_MS = 20_000;
+// How long to wait for the agent to join before telling the caller nobody picked up. LiveKit
+// Cloud's free plan scales an idle agent to zero, and waking it takes 10-20 s; ringback covers it.
+const PICKUP_TIMEOUT_MS = 45_000;
 
 function isAgent(p: Participant) {
   return p.kind === ParticipantKind.AGENT || AGENT_STATE in p.attributes;
@@ -199,11 +200,18 @@ export function useLiveCall({ callerName = "Website caller", onEnded }: { caller
       const id = attrs[SEGMENT_ID] || reader.info.id;
       const speaker = participantInfo.identity === r.localParticipant.identity ? "caller" : "agent";
       let text = "";
-      for await (const chunk of reader) {
-        text += chunk;
-        if (text.trim()) upsert(id, speaker, text, false);
+      let cut = false;
+      try {
+        for await (const chunk of reader) {
+          text += chunk;
+          if (text.trim()) upsert(id, speaker, text, false);
+        }
+      } catch {
+        // The room closed mid-line (a hang-up while the agent talks, or the agent dropped). The
+        // reader throws DataStreamError; keep what arrived, as no more of this line will.
+        cut = true;
       }
-      if (text.trim()) upsert(id, speaker, text, attrs[FINAL] === "true" || speaker === "agent");
+      if (text.trim()) upsert(id, speaker, text, cut || attrs[FINAL] === "true" || speaker === "agent");
     });
 
     try {
