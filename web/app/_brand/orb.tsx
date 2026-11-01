@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { readTheme, subscribeTheme } from "./theme";
 
 export type OrbState = "idle" | "listening" | "thinking" | "speaking";
 
@@ -93,20 +94,24 @@ uniform float uFray;
 uniform float uLevel;
 uniform float uSize;
 uniform float uPixelRatio;
+uniform float uInk;
 attribute float aSeed;
 varying vec3 vColor;
 varying float vAlpha;
 ${NOISE}
 
-// Warm at the base, cool at the crown, like the reference sphere.
-vec3 palette(float h) {
-  vec3 amber = vec3(1.0, 0.71, 0.45);
-  vec3 ember = vec3(0.95, 0.37, 0.16);
-  vec3 rose = vec3(0.74, 0.22, 0.44);
-  vec3 iris = vec3(0.38, 0.43, 0.96);
+vec3 ramp(float h, vec3 amber, vec3 ember, vec3 rose, vec3 iris) {
   vec3 c = mix(amber, ember, smoothstep(0.0, 0.3, h));
   c = mix(c, rose, smoothstep(0.32, 0.68, h));
   return mix(c, iris, smoothstep(0.68, 1.0, h));
+}
+
+// Warm at the base, cool at the crown, like the reference sphere. On a light page the same ramp
+// in deeper pigments, since the dots ink the paper instead of lighting the dark.
+vec3 palette(float h) {
+  vec3 lit = ramp(h, vec3(1.0, 0.71, 0.45), vec3(0.95, 0.37, 0.16), vec3(0.74, 0.22, 0.44), vec3(0.38, 0.43, 0.96));
+  vec3 ink = ramp(h, vec3(0.93, 0.55, 0.24), vec3(0.84, 0.3, 0.1), vec3(0.62, 0.15, 0.38), vec3(0.27, 0.31, 0.86));
+  return mix(lit, ink, uInk);
 }
 
 void main() {
@@ -137,12 +142,14 @@ void main() {
   float rim = 1.0 - abs(facing);
   vColor = palette(clamp(nv.y * 0.5 + 0.5 + n * 0.08, 0.0, 1.0));
 
-  // A handful of particles flare white for a moment.
+  // A handful of particles flare for a moment: white on the dark, rust on a light page.
   float flare = step(0.986, aSeed) * pow(0.5 + 0.5 * sin(uClock * (1.5 + aSeed * 3.0) + aSeed * 60.0), 6.0);
-  vColor = mix(vColor, vec3(1.0, 0.96, 0.92), flare);
+  vColor = mix(vColor, mix(vec3(1.0, 0.96, 0.92), vec3(0.78, 0.25, 0.06), uInk), flare);
 
   // No glow: the far side shows through faintly and the rim brightens by density alone.
   vAlpha = mix(0.16, 0.75, smoothstep(-0.8, 0.2, facing)) * (0.75 + 0.5 * rim) * (0.7 + 0.3 * aSeed) + flare * 0.5 + lift;
+  // Ink lays down less than light adds up, so a light page gets more of it.
+  vAlpha *= mix(1.0, 1.6, uInk);
   float size = uSize * (0.55 + aSeed * 0.75) * (1.0 + uLevel * 0.35) * (1.0 - lift * 0.4);
   gl_PointSize = size * uPixelRatio * (3.2 / -mv.z);
 }
@@ -260,7 +267,8 @@ export function Orb({
         uFray: { value: look.fray },
         uLevel: { value: 0 },
         uSize: { value: 2.4 },
-        uPixelRatio: { value: dpr }
+        uPixelRatio: { value: dpr },
+        uInk: { value: 0 }
       };
       const material = new THREE.ShaderMaterial({
         vertexShader: VERTEX,
@@ -271,6 +279,15 @@ export function Orb({
         depthTest: false,
         blending: THREE.AdditiveBlending
       });
+      // Lit by density on the dark; inked by density in light mode, the phone's screen included.
+      const applyTheme = () => {
+        const ink = readTheme() === "light";
+        uniforms.uInk.value = ink ? 1 : 0;
+        material.blending = ink ? THREE.NormalBlending : THREE.AdditiveBlending;
+        material.needsUpdate = true;
+      };
+      applyTheme();
+      const unsubscribeTheme = subscribeTheme(applyTheme);
       const points = new THREE.Points(geometry, material);
       points.rotation.x = 0.28;
       scene.add(points);
@@ -375,6 +392,7 @@ export function Orb({
 
       teardown = () => {
         cancelAnimationFrame(raf);
+        unsubscribeTheme();
         watcher.disconnect();
         sizer.disconnect();
         document.removeEventListener("visibilitychange", sync);

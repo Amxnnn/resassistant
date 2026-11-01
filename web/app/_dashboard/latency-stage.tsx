@@ -2,9 +2,10 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LATENCY_BUDGET_MS } from "./format";
+import { readTheme, subscribeTheme } from "../_brand/theme";
 
 /* The response-time stage: every timed reply as a column of its pipeline stages, standing on a
-   dark floor under a glass sheet at the latency budget. Three.js draws it; GSAP builds it, moves
+   rust-lit floor under a glass sheet at the latency budget, in the page's light or dark. Three.js draws it; GSAP builds it, moves
    the columns between orders and dims the ones not in focus. Without WebGL a flat chart of the
    same columns stands in, and the table under it holds every value either way. */
 
@@ -34,6 +35,12 @@ export const STAGES: { key: StageKey; label: string; color: string }[] = [
 ];
 
 const INK = "#f3efe9";
+// The same stage on a light page: dark ink, pale resting columns and gridlines, a softer floor light,
+// and a fainter reflection (colour on white reads louder than colour on black).
+const LOOK = {
+  dark: { ink: INK, rest: [0.16, 0.145, 0.14], grid: 0x2e2724, floor: [0.56, 0.23, 0.09, 0.26], pane: 0.075, edge: 0.6, mirror: 0.2 },
+  light: { ink: "#1d1a18", rest: [0.86, 0.84, 0.82], grid: 0xddd5ce, floor: [0.94, 0.5, 0.25, 0.16], pane: 0.05, edge: 0.5, mirror: 0.08 }
+} as const;
 const NARROW_REPLIES = 60; // a phone-shaped stage shows the latest replies only, so columns stay readable
 const H = 4.4; // world height of the axis maximum
 const GAP = 0.035; // the surface gap between stacked stages
@@ -122,25 +129,27 @@ void main() {
 
 const FRAGMENT = /* glsl */ `
 uniform float uReflect;
+uniform float uMirror;
+uniform vec3 uRest;
 varying vec3 vColor;
 varying float vShade;
 varying float vFocus;
 varying float vY;
 
 void main() {
-  vec3 rest = vec3(0.16, 0.145, 0.14);
-  vec3 c = mix(rest, vColor, 0.22 + 0.78 * vFocus) * vShade;
-  float a = uReflect > 0.5 ? 0.2 * smoothstep(-1.5, 0.0, vY) * (0.35 + 0.65 * vFocus) : 1.0;
+  vec3 c = mix(uRest, vColor, 0.22 + 0.78 * vFocus) * vShade;
+  float a = uReflect > 0.5 ? uMirror * smoothstep(-1.5, 0.0, vY) * (0.35 + 0.65 * vFocus) : 1.0;
   gl_FragColor = vec4(c, a);
 }
 `;
 
 const FLOOR_FRAGMENT = /* glsl */ `
+uniform vec4 uFloor;
 varying vec2 vUv;
 void main() {
   vec2 p = (vUv - 0.5) * vec2(1.0, 1.9);
   float glow = 1.0 - smoothstep(0.0, 0.5, length(p));
-  gl_FragColor = vec4(0.56, 0.23, 0.09, 0.26 * glow * glow);
+  gl_FragColor = vec4(uFloor.rgb, uFloor.a * glow * glow);
 }
 `;
 
@@ -167,6 +176,9 @@ export function LatencyStage({
   const activeRef = useRef(active);
   activeRef.current = active;
   const [mode, setMode] = useState<"loading" | "3d" | "flat">("loading");
+  // Bumped when the theme changes, so the scene is rebuilt in the other look.
+  const [themeTick, setThemeTick] = useState(0);
+  useEffect(() => subscribeTheme(() => setThemeTick(t => t + 1)), []);
   const [shape, setShape] = useState<"wide" | "narrow">("wide");
   const turns = useMemo(() => (shape === "narrow" ? allTurns.slice(-NARROW_REPLIES) : allTurns), [allTurns, shape]);
 
@@ -214,6 +226,7 @@ export function LatencyStage({
       renderer.setClearColor(0x000000, 0);
       el.prepend(canvas);
 
+      const look = LOOK[readTheme()];
       const n = turns.length;
       const width = shape === "wide" ? 12 : 5.4;
       const toY = (v: number) => (Math.min(v, axis.max) / axis.max) * H;
@@ -240,7 +253,12 @@ export function LatencyStage({
       box.setAttribute("aColor", colorAttr);
       box.setAttribute("aFocus", focusAttr);
 
-      const material = new THREE.ShaderMaterial({ vertexShader: VERTEX, fragmentShader: FRAGMENT, uniforms: { uReflect: { value: 0 } } });
+      const rest = new THREE.Vector3(...look.rest);
+      const material = new THREE.ShaderMaterial({
+        vertexShader: VERTEX,
+        fragmentShader: FRAGMENT,
+        uniforms: { uReflect: { value: 0 }, uMirror: { value: look.mirror }, uRest: { value: rest } }
+      });
       const columns = new THREE.InstancedMesh(box, material, n * 4);
       columns.frustumCulled = false;
       columns.renderOrder = 2;
@@ -250,7 +268,7 @@ export function LatencyStage({
       const mirror = new THREE.ShaderMaterial({
         vertexShader: VERTEX,
         fragmentShader: FRAGMENT,
-        uniforms: { uReflect: { value: 1 } },
+        uniforms: { uReflect: { value: 1 }, uMirror: { value: look.mirror }, uRest: { value: rest } },
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide
@@ -266,7 +284,7 @@ export function LatencyStage({
       const clipped = turns.map(t => t.total > axis.max);
       const capMesh = new THREE.InstancedMesh(
         new THREE.BoxGeometry(1, 1, 1),
-        new THREE.MeshBasicMaterial({ color: INK }),
+        new THREE.MeshBasicMaterial({ color: look.ink }),
         n
       );
       capMesh.frustumCulled = false;
@@ -279,6 +297,7 @@ export function LatencyStage({
         new THREE.ShaderMaterial({
           vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
           fragmentShader: FLOOR_FRAGMENT,
+          uniforms: { uFloor: { value: new THREE.Vector4(...look.floor) } },
           transparent: true,
           depthWrite: false
         })
@@ -295,7 +314,7 @@ export function LatencyStage({
       grid.push(-width / 2 - 0.25, 0, 0.75, width / 2 + 0.25, 0, 0.75);
       const gridGeo = new THREE.BufferGeometry();
       gridGeo.setAttribute("position", new THREE.Float32BufferAttribute(grid, 3));
-      const gridLines = new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({ color: 0x2e2724 }));
+      const gridLines = new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({ color: look.grid }));
       scene.add(gridLines);
 
       // The budget: a sheet of glass the slow replies pierce, drawn in from the left.
@@ -304,14 +323,14 @@ export function LatencyStage({
       sheet.position.set(-sheetW / 2, toY(budget), 0);
       const pane = new THREE.Mesh(
         new THREE.PlaneGeometry(sheetW, 2.3).rotateX(-Math.PI / 2).translate(sheetW / 2, 0, -0.2),
-        new THREE.MeshBasicMaterial({ color: INK, transparent: true, opacity: 0.075, depthWrite: false, side: THREE.DoubleSide })
+        new THREE.MeshBasicMaterial({ color: look.ink, transparent: true, opacity: look.pane, depthWrite: false, side: THREE.DoubleSide })
       );
       pane.renderOrder = 3;
       const edgeGeo = new THREE.BufferGeometry();
       edgeGeo.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0.95, sheetW, 0, 0.95, 0, 0, -1.35, sheetW, 0, -1.35], 3));
       const edges = new THREE.LineSegments(
         edgeGeo,
-        new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.6, depthWrite: false })
+        new THREE.LineBasicMaterial({ color: look.ink, transparent: true, opacity: look.edge, depthWrite: false })
       );
       edges.renderOrder = 4;
       sheet.add(pane, edges);
@@ -575,7 +594,7 @@ export function LatencyStage({
     };
     // Rebuilt only when the replies, the axis or the stage's shape change; order and focus tween.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, axis.max, shape, budget]);
+  }, [signature, axis.max, shape, budget, themeTick]);
 
   useEffect(() => {
     api.current?.setOrder(order);

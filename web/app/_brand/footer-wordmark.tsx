@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { readTheme, subscribeTheme } from "./theme";
 
 const WORD = "Resassistant";
 const SAMPLE_W = 2400; // sampling canvas width; world units match its pixels
@@ -15,19 +16,23 @@ uniform float uHover;
 uniform float uScale;
 uniform float uPixelRatio;
 uniform vec2 uSize;
+uniform float uInk;
 attribute vec3 aStart;
 attribute float aSeed;
 varying vec3 vColor;
 varying float vAlpha;
 
-vec3 palette(float h) {
-  vec3 amber = vec3(1.0, 0.71, 0.45);
-  vec3 ember = vec3(0.95, 0.37, 0.16);
-  vec3 rose = vec3(0.74, 0.22, 0.44);
-  vec3 iris = vec3(0.38, 0.43, 0.96);
+vec3 ramp(float h, vec3 amber, vec3 ember, vec3 rose, vec3 iris) {
   vec3 c = mix(amber, ember, smoothstep(0.0, 0.32, h));
   c = mix(c, rose, smoothstep(0.34, 0.7, h));
   return mix(c, iris, smoothstep(0.7, 1.0, h));
+}
+
+// The orb's ramp: lit on the dark footer, in deeper pigments on the light one.
+vec3 palette(float h) {
+  vec3 lit = ramp(h, vec3(1.0, 0.71, 0.45), vec3(0.95, 0.37, 0.16), vec3(0.74, 0.22, 0.44), vec3(0.38, 0.43, 0.96));
+  vec3 ink = ramp(h, vec3(0.93, 0.55, 0.24), vec3(0.84, 0.3, 0.1), vec3(0.62, 0.15, 0.38), vec3(0.27, 0.31, 0.86));
+  return mix(lit, ink, uInk);
 }
 
 void main() {
@@ -52,8 +57,8 @@ void main() {
   pos.xy += normalize(away + 0.0001) * push * 34.0;
 
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-  vColor = mix(palette(clamp(n.y + aSeed * 0.08, 0.0, 1.0)), vec3(1.0, 0.95, 0.9), wave * 0.6);
-  vAlpha = (0.55 + 0.45 * aSeed) * mix(0.35, 1.0, p) + wave * 0.4;
+  vColor = mix(palette(clamp(n.y + aSeed * 0.08, 0.0, 1.0)), mix(vec3(1.0, 0.95, 0.9), vec3(0.78, 0.25, 0.06), uInk), wave * 0.6);
+  vAlpha = ((0.55 + 0.45 * aSeed) * mix(0.35, 1.0, p) + wave * 0.4) * mix(1.0, 1.3, uInk);
   gl_PointSize = (2.8 + aSeed * 1.6 + wave * 2.0) * uScale * uPixelRatio;
 }
 `;
@@ -157,7 +162,8 @@ export function FooterWordmark() {
         uHover: { value: 0 },
         uScale: { value: 1 },
         uPixelRatio: { value: dpr },
-        uSize: { value: new THREE.Vector2(SAMPLE_W, h) }
+        uSize: { value: new THREE.Vector2(SAMPLE_W, h) },
+        uInk: { value: 0 }
       };
       const material = new THREE.ShaderMaterial({
         vertexShader: VERTEX,
@@ -169,6 +175,15 @@ export function FooterWordmark() {
         blending: THREE.AdditiveBlending
       });
       scene.add(new THREE.Points(geometry, material));
+
+      // Lit by density on the dark footer, inked by density on the light one.
+      const applyTheme = () => {
+        const ink = readTheme() === "light";
+        uniforms.uInk.value = ink ? 1 : 0;
+        material.blending = ink ? THREE.NormalBlending : THREE.AdditiveBlending;
+        material.needsUpdate = true;
+      };
+      applyTheme();
 
       const resize = () => {
         const r = el.getBoundingClientRect();
@@ -230,12 +245,17 @@ export function FooterWordmark() {
       }, { threshold: 0.25 });
       watcher.observe(el);
       document.addEventListener("visibilitychange", sync);
+      const unsubscribeTheme = subscribeTheme(() => {
+        applyTheme();
+        draw();
+      });
       const sizer = new ResizeObserver(resize);
       sizer.observe(el);
       resize();
 
       teardown = () => {
         cancelAnimationFrame(raf);
+        unsubscribeTheme();
         watcher.disconnect();
         sizer.disconnect();
         document.removeEventListener("visibilitychange", sync);
