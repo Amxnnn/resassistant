@@ -202,8 +202,13 @@ class MessageReceipt(BaseModel):
 
 
 class Channel(StrEnum):
+    """
+    Where the conversation happened: `phone` (the restaurant's number), `browser` (a test call from the web app) or `telegram` (a text chat with the restaurant's Telegram bot, or a call to its Telegram account).
+    """
+
     phone = "phone"
     browser = "browser"
+    telegram = "telegram"
 
 
 class Outcome(StrEnum):
@@ -342,13 +347,16 @@ class CreateCallLogRequest(BaseModel):
     call_id: str = Field(..., max_length=100)
     idempotency_key: UUID
     channel: Channel
+    """
+    Where the conversation happened: `phone` (the restaurant's number), `browser` (a test call from the web app) or `telegram` (a text chat with the restaurant's Telegram bot, or a call to its Telegram account).
+    """
     caller_number: str | None = Field(..., pattern="^\\+[1-9][0-9]{6,14}$")
     """
-    Null for browser test calls or withheld caller ID.
+    Null for browser test calls or withheld caller ID. In a Telegram chat, the number the guest shared from their own Telegram account, or null if they didn't share it.
     """
     dialed_number: str | None = Field(..., pattern="^\\+[1-9][0-9]{6,14}$")
     """
-    Null for browser test calls.
+    Null for browser test calls and Telegram chats.
     """
     started_at: AwareDatetime
     ended_at: AwareDatetime

@@ -129,6 +129,12 @@ class LatencyTracker:
             return turn
         return None
 
+    def add_unmeasured(self, msg: ChatMessage) -> Turn:
+        """A line that never went through the LLM (a chat's /menu and the menu it sent): in the
+        transcript, with no timings."""
+        self._pending_caller = None
+        return self._record(msg, "agent" if msg.role == "assistant" else "caller", latency=None)
+
     def _record(self, msg: ChatMessage, speaker: str, latency: TurnLatency | None) -> Turn:
         turn = Turn(
             index=len(self.turns),

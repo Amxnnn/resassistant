@@ -5,6 +5,8 @@
 .venv/
 .cache/
 .sample_state.json
+*.session
+*.session-journal
 **/__pycache__/
 .pytest_cache/
 .ruff_cache/

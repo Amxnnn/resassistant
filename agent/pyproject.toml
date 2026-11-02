@@ -25,6 +25,11 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.17.2",
 ]
+# Answering Telegram calls with the agent, for testing (python -m agent.telegram_call). Not installed
+# by default, so it stays out of CI and the LiveKit Cloud image: uv run --group telegram-call ...
+telegram-call = [
+    "py-tgcalls[telethon]>=3.0.0",
+]
 
 [tool.ruff]
 line-length = 110

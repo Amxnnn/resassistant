@@ -46,3 +46,26 @@ def test_the_agent_waits_longer_only_while_the_caller_reads_out_a_number():
 
     session.say_and_hear("assistant", "Phone 9 8 7 6 5, 4 3 2 1 0, is that right?")
     assert session.options == [TAKING_DIGITS, QUICK]
+
+
+def test_a_name_day_time_or_party_size_gets_a_little_longer_than_a_quick_reply():
+    from agent.tools import ASK
+    from agent.turn_taking import TAKING_DETAIL, endpointing_after
+
+    for detail in ("party_size", "day_and_time", "day", "name"):
+        for line in ASK[detail]:
+            assert endpointing_after(line) == TAKING_DETAIL, line
+    assert endpointing_after(ASK["time"][0].format(day="on Tuesday")) == TAKING_DETAIL
+    assert (
+        endpointing_after("Good news, it's free. What name should I put the booking under?") == TAKING_DETAIL
+    )
+    assert endpointing_after("When would you like to come in?") == TAKING_DETAIL
+    # The number still waits longest; anything else stays quick.
+    assert endpointing_after(ASK["phone"][0]) == TAKING_DIGITS
+    assert endpointing_after("We're open six to eleven tonight. Anything else?") == QUICK
+    # A read-back mentions the name and the time, but its question is a yes or no.
+    assert (
+        endpointing_after("Just to confirm: a table for 4 under Asha, Tuesday at 7:30 PM. Shall I book it?")
+        == QUICK
+    )
+    assert QUICK["min_delay"] < TAKING_DETAIL["min_delay"] < TAKING_DIGITS["min_delay"]

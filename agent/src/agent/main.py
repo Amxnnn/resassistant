@@ -65,6 +65,9 @@ DEFAULT_GROQ_MODELS = "openai/gpt-oss-120b,openai/gpt-oss-20b"
 # fails again, which costs that request about 0.2 s before the next model answers.
 RETRY_FAILED_LLM_AFTER = 20.0
 
+# How long a Telegram call's greeting waits for the bridge to connect the call (caller_audio).
+CALLER_AUDIO_SECONDS = 30.0
+
 NOT_SET_UP = "Sorry, this number isn't set up yet. Please try again later. Goodbye!"
 API_DOWN = "Sorry, I can't reach our booking system right now. Please call back in a few minutes. Goodbye!"
 
@@ -168,8 +171,8 @@ def select_noise_cancellation(params: NoiseCancellationParams):
 
 @dataclass
 class CallInfo:
-    channel: Literal["phone", "browser"]
-    caller_phone: str | None  # from the phone line; None for browser and console calls
+    channel: Literal["phone", "browser", "telegram"]
+    caller_phone: str | None  # from the phone line (or Telegram); None for browser and console calls
     dialed: str  # the restaurant number the call is for
     identity: str | None = None  # the caller's participant in the room; None in console mode
 
@@ -183,8 +186,43 @@ async def identify_call(ctx: JobContext) -> CallInfo:
     if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
         dialed = attrs.get("sip.trunkPhoneNumber") or default
         return CallInfo("phone", attrs.get("sip.phoneNumber"), dialed, participant.identity)
+    dialed = attrs.get("restaurant_phone") or default
+    if attrs.get("call_channel") == "telegram":
+        # A Telegram call (agent/telegram_call): the caller's number when Telegram shows it.
+        return CallInfo("telegram", attrs.get("caller_phone") or None, dialed, participant.identity)
     # Browser test calls: the web token route sets restaurant_phone (see contracts/openapi.yaml).
-    return CallInfo("browser", None, attrs.get("restaurant_phone") or default, participant.identity)
+    return CallInfo("browser", None, dialed, participant.identity)
+
+
+async def caller_audio(room: rtc.Room, identity: str | None, timeout: float = CALLER_AUDIO_SECONDS) -> bool:
+    """Wait until the caller publishes audio; False if they haven't within `timeout` seconds.
+
+    A Telegram call's bridge publishes it once Telegram has connected the call. A greeting started
+    before then is lost: the caller is still hearing the phone ring.
+    """
+
+    def has_audio() -> bool:
+        caller = room.remote_participants.get(identity) if identity else None
+        return caller is not None and any(
+            p.kind == rtc.TrackKind.KIND_AUDIO for p in caller.track_publications.values()
+        )
+
+    if has_audio():
+        return True
+    published = asyncio.Event()
+
+    def on_published(*_args) -> None:
+        if has_audio():
+            published.set()
+
+    room.on("track_published", on_published)
+    try:
+        await asyncio.wait_for(published.wait(), timeout)
+        return True
+    except TimeoutError:
+        return False
+    finally:
+        room.off("track_published", on_published)
 
 
 async def release_console_audio() -> None:
@@ -230,7 +268,9 @@ async def entrypoint(ctx: JobContext) -> None:
     settings = asyncio.create_task(api.get_restaurant_by_number(call.dialed))
 
     session_llm, llm_label = build_llm()
-    stt = deepgram.STT(model="nova-3", language="en-US")
+    # en-US by default: on Indian-accented test calls (2 Nov 2026) it matched en-IN and beat "multi",
+    # which garbled English names; see docs/agent.md before changing it.
+    stt = deepgram.STT(model="nova-3", language=os.getenv("STT_LANGUAGE", "en-US"))
     # Seconds of silence before "Are you still there?", and again before hanging up.
     silence_seconds = float(os.getenv("SILENCE_CHECK_IN_SECONDS", "10"))
     # Its userdata (the CallState) is set once the restaurant's settings are in.
@@ -238,7 +278,7 @@ async def entrypoint(ctx: JobContext) -> None:
         vad=ctx.proc.userdata["vad"],
         stt=stt,
         llm=session_llm,
-        tts=deepgram.TTS(model="aura-2-andromeda-en"),
+        tts=deepgram.TTS(model=os.getenv("TTS_VOICE", "aura-2-andromeda-en")),
         turn_handling=TurnHandlingOptions(
             # LiveKit's turn model: hosted in dev and on LiveKit Cloud, local "mini" model as fallback.
             turn_detection=inference.TurnDetector(),
@@ -361,6 +401,10 @@ async def entrypoint(ctx: JobContext) -> None:
     logger.info("call started | %s | %s | %s", call_id, call.channel, restaurant.name)
 
     await receptionist.begin(state)
+    if call.channel == "telegram" and not await caller_audio(ctx.room, call.identity):
+        logger.warning(
+            "the Telegram call didn't connect within %.0f s; greeting anyway", CALLER_AUDIO_SECONDS
+        )
     session.say(build_greeting(restaurant))
     limits.start()
 

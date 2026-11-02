@@ -138,5 +138,57 @@ Content-Type: application/json
   ]
 }
 
+### Save the chat log (a Telegram chat ends)
+POST {{baseUrl}}/api/agent/calls
+x-agent-key: {{agentKey}}
+Content-Type: application/json
+
+{
+  "restaurant_id": "{{restaurantId}}",
+  "call_id": "call_3f9a1c7e5b2d4a6c8e0f1a3b5c7d9e1f",
+  "idempotency_key": "{{$guid}}",
+  "channel": "telegram",
+  "caller_number": null,
+  "dialed_number": null,
+  "started_at": "2026-10-24T18:40:03+05:30",
+  "ended_at": "2026-10-24T18:41:15+05:30",
+  "language": "en",
+  "outcome": "answered",
+  "recording_url": null,
+  "turns": [
+    {
+      "index": 0,
+      "speaker": "agent",
+      "text": "Hi, welcome to The Saffron Table! I'm the AI assistant. How can I help?",
+      "at": "2026-10-24T18:40:03+05:30",
+      "interrupted": false,
+      "latency": null
+    },
+    {
+      "index": 1,
+      "speaker": "caller",
+      "text": "is there parking",
+      "at": "2026-10-24T18:40:09+05:30",
+      "interrupted": false,
+      "latency": null
+    },
+    {
+      "index": 2,
+      "speaker": "agent",
+      "text": "Yes, there's free valet parking at the entrance from 6 PM.",
+      "at": "2026-10-24T18:40:11+05:30",
+      "interrupted": false,
+      "latency": {
+        "eou_ms": null,
+        "stt_ms": null,
+        "llm_ttft_ms": 610,
+        "tts_ttfb_ms": null,
+        "total_ms": null,
+        "llm_model": "openai/gpt-oss-120b"
+      }
+    }
+  ]
+}
+
 ### Missing key: should return 401
 GET {{baseUrl}}/api/agent/restaurants/by-number/+14155550123

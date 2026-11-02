@@ -1,4 +1,8 @@
-"""System prompt and greeting. One template file per language, filled per call."""
+"""System prompt and greeting. One template file per language, filled per call.
+
+Text chats have their own template per language (receptionist_chat_<language>.md): the same rules,
+written for messages instead of speech.
+"""
 
 from __future__ import annotations
 
@@ -42,10 +46,15 @@ def build_instructions(
     facts: str | None = None,
     lookups: Sequence[str] = LOOKUP_TOOLS,
     language: str = "en",
+    chat: bool = False,
 ) -> str:
-    template = (_TEMPLATES / f"receptionist_{language}.md").read_text(encoding="utf-8")
+    name = f"receptionist_chat_{language}.md" if chat else f"receptionist_{language}.md"
+    template = (_TEMPLATES / name).read_text(encoding="utf-8")
     now = restaurant.now
-    phone_rule = " You have their number from the phone line, so never ask for it." if caller_id_known else ""
+    phone_rule = ""
+    if caller_id_known:
+        source = "They shared their number with you" if chat else "You have their number from the phone line"
+        phone_rule = f" {source}, so never ask for it."
     return template.format(
         restaurant_name=restaurant.name,
         now=f"{now:%A} {now.day} {now:%B %Y}, {speak_time(now)}",
@@ -73,3 +82,16 @@ def build_greeting(restaurant: RestaurantSettings) -> str:
         parts.append("This call is recorded for quality.")
     parts.append("How can I help?")
     return " ".join(parts)
+
+
+def build_chat_greeting(restaurant: RestaurantSettings) -> str:
+    """A chat's first message: who we are, that this is an AI, how to reach staff, and that chats are kept.
+
+    The restaurant's own greeting is written for a phone call ("Thanks for calling"), so a chat
+    gets its own. The transcript is saved like a call's, so the notice is always given.
+    """
+    return (
+        f"Hi, welcome to {restaurant.name}! I'm the AI assistant. I can book a table, answer questions "
+        "about the menu and opening hours, or pass a message to our staff. Chats are saved so our team "
+        "can follow up. How can I help?"
+    )

@@ -25,6 +25,7 @@ INFO_TOPICS = ["hours", "location", "parking", "delivery", "specials", "policies
 MENU_LIMIT = 20  # the contract's maximum page size
 MAX_PARALLEL = 3  # gentle on the web app's database pool
 MAX_KEYTERMS = 60  # Deepgram accepts up to 100; the rest of the vocabulary needs no help
+FIELD_MAX = 300  # characters of any one piece of restaurant data in the prompt
 
 _NAME = re.compile(r"\b[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}\b")
 _COMMON = {
@@ -43,16 +44,22 @@ class Facts:
     whole_menu: bool = True  # every dish listed: search_menu has nothing to add
 
 
+def one_line(text: str, limit: int = FIELD_MAX) -> str:
+    """Restaurant data as one short line. Staff type it in the dashboard, and a field with line breaks
+    could otherwise start what looks like a new section of the prompt ("# New rules: ...")."""
+    return " ".join(text.split())[:limit]
+
+
 def _menu_line(item: MenuItem) -> str:
-    parts = [f"{item.name} ({item.category}) {item.price:g} rupees"]
+    parts = [f"{one_line(item.name, 80)} ({one_line(item.category, 40)}) {item.price:g} rupees"]
     if item.dietary_tags:
-        parts.append(", ".join(t.replace("_", " ") for t in item.dietary_tags))
+        parts.append(", ".join(one_line(t, 30).replace("_", " ") for t in item.dietary_tags))
     if item.spice_level and item.spice_level != "none":
-        parts.append(f"{item.spice_level} spicy")
+        parts.append(f"{one_line(item.spice_level, 20)} spicy")
     if not item.allergens_listed:
         parts.append("allergens NOT LISTED")
     elif item.allergens:
-        parts.append("contains " + ", ".join(item.allergens))
+        parts.append("contains " + ", ".join(one_line(a, 30) for a in item.allergens))
     else:
         parts.append("no listed allergens")
     if not item.available_today:
@@ -99,7 +106,7 @@ async def load_facts(api: RestaurantAPI, restaurant: RestaurantSettings) -> Fact
     async def info(topic: str) -> str | None:
         async with gate:
             try:
-                return (await api.get_info(restaurant.id, topic)).summary
+                return one_line((await api.get_info(restaurant.id, topic)).summary) or None
             except ApiError:
                 return None
 

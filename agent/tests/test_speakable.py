@@ -13,6 +13,7 @@ from agent.speakable import (
     speak_time,
     spell_code,
     spoken_digits,
+    write_phone,
 )
 
 
@@ -38,6 +39,11 @@ def test_normalize_phone_assumes_india_without_a_country_code(raw, expected):
         ("nine eight seven double five triple four two one", "9875544421"),
         ("Oh, it's 98765 oh 4321.", "9876504321"),  # a leading "oh" is a sound, not a zero
         ("Sure. For four people.", "4"),
+        # In pairs, the way many Indian callers read a number out
+        ("ninety eight, seventy six, fifty four, thirty two, ten", "9876543210"),
+        ("nine eight seven six five, forty three, twenty one, zero", "9876543210"),  # mixed
+        ("ninety nine eight double zero seventy seven one two three", "9980077123"),
+        ("eighty, nineteen", "8019"),
     ],
 )
 def test_numbers_read_out_as_words_become_digits(said, digits):
@@ -52,6 +58,12 @@ def test_a_number_said_as_words_is_still_a_phone_number():
 def test_phone_numbers_are_spaced_so_tts_reads_single_digits():
     assert speak_phone("+919876543210") == "9 8 7 6 5, 4 3 2 1 0"
     assert speak_phone("+12025550147") == "2 0 2, 5 5 5, 0 1 4 7"
+
+
+def test_phone_numbers_in_a_chat_are_written_the_usual_way():
+    assert write_phone("+919876543210") == "+91 98765 43210"
+    assert write_phone("+12025550147") == "+1 202 555 0147"
+    assert write_phone("+447700900123") == "+447700900123"  # other countries as they are
 
 
 def test_times_days_and_codes_read_naturally():

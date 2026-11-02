@@ -1,4 +1,7 @@
-"""Text written for the ear: times, days, phone numbers and booking codes as a voice should say them."""
+"""Text written for the ear: times, days, phone numbers and booking codes as a voice should say them.
+
+Text chats show the same times and days; only phone numbers and codes are written differently.
+"""
 
 from __future__ import annotations
 
@@ -45,24 +48,41 @@ def join_or(items: list[str]) -> str:
 
 _DIGIT_WORDS = {
     "zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
-    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11", "twelve": "12",
+    "thirteen": "13", "fourteen": "14", "fifteen": "15", "sixteen": "16", "seventeen": "17",
+    "eighteen": "18", "nineteen": "19",
 }  # fmt: skip
+_TENS = {
+    "twenty": "2", "thirty": "3", "forty": "4", "fifty": "5", "sixty": "6", "seventy": "7",
+    "eighty": "8", "ninety": "9",
+}  # fmt: skip
+_UNITS = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 _REPEATS = {"double": 2, "triple": 3}
 
 
 def spoken_digits(text: str) -> str:
-    """The digits of a number however it arrived: "98765 43210", "nine eight seven", "double five".
+    """The digits of a number however it arrived: "98765 43210", "nine eight seven", "double five",
+    or in pairs, "ninety eight, seventy six" (how many Indian callers read a number out).
 
-    Speech-to-text often writes a number read out digit by digit as words, and the LLM doesn't always
-    turn them into digits before passing them on.
+    Speech-to-text often writes a number read out as words, and the LLM doesn't always turn them
+    into digits before passing them on.
     """
     digits: list[str] = []
     repeat = 1
-    for token in re.findall(r"\d+|[a-z]+", text.lower()):
+    tokens = re.findall(r"\d+|[a-z]+", text.lower())
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        i += 1
         if token in _REPEATS:
             repeat = _REPEATS[token]
             continue
-        found = token if token.isdigit() else _DIGIT_WORDS.get(token)
+        if token in _TENS:  # "ninety eight" is 98; "ninety" alone is 90
+            unit = tokens[i] if i < len(tokens) and tokens[i] in _UNITS else None
+            found = _TENS[token] + (_DIGIT_WORDS[unit] if unit else "0")
+            i += unit is not None
+        else:
+            found = token if token.isdigit() else _DIGIT_WORDS.get(token)
         if found is None or (token in ("oh", "o") and not digits):  # "Oh, it's..." isn't a zero
             repeat = 1
             continue
@@ -100,6 +120,16 @@ def speak_phone(e164: str) -> str:
     else:
         groups = [digits[i : i + 3] for i in range(0, len(digits), 3)]
     return ", ".join(" ".join(g) for g in groups)
+
+
+def write_phone(e164: str) -> str:
+    """For a chat, where speak_phone is for a voice: +91 98765 43210, +1 415 555 0123."""
+    digits = e164.lstrip("+")
+    if digits.startswith("91") and len(digits) == 12:
+        return f"+91 {digits[2:7]} {digits[7:]}"
+    if digits.startswith("1") and len(digits) == 11:
+        return f"+1 {digits[1:4]} {digits[4:7]} {digits[7:]}"
+    return e164
 
 
 def spell_code(code: str) -> str:

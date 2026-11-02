@@ -387,6 +387,18 @@ wheels = [
 ]
 
 [[package]]
+name = "deprecation"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/d3/8ae2869247df154b64c1884d7346d412fed0c49df84db635aab2d1c40e62/deprecation-2.1.0.tar.gz", hash = "sha256:72b3bde64e5d778694b0cf68178aed03d15e15477116add3fb773e581f9518ff", size = 173788, upload-time = "2020-04-20T14:23:38.738Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/02/c3/253a89ee03fc9b9682f1541728eb66db7db22148cd94f89ab22528cd1e1b/deprecation-2.1.0-py2.py3-none-any.whl", hash = "sha256:a10811591210e1fb0e768a8c25517cabeabcba6f0bf96564f8ff45189f90b14a", size = 11178, upload-time = "2020-04-20T14:23:36.581Z" },
+]
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1210,6 +1222,22 @@ wheels = [
 ]
 
 [[package]]
+name = "ntgcalls"
+version = "3.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/6c/05016f20c9fc0e23298ef868ba47cb1089990becb35b09b71812706d7de5/ntgcalls-3.0.5.tar.gz", hash = "sha256:24b2783ccf71fe1526f7c130f5b40a8b990d21db61616a07156ccc46bc030def", size = 20721540, upload-time = "2026-10-19T21:54:15.836Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/14/7541b283120ade94cbe2a2b7648b9108c7bf31d9a3fe3cbcecd576b3bef2/ntgcalls-3.0.5-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:e69353979ea0804409f388f20b8f01af92d177e4b2fdc804a8c1f3c9acd63bcd", size = 11048444, upload-time = "2026-10-19T21:53:34.385Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/8a/d4534eda50376dd273db2eeca12a8e87615c450a2ac48ad81475dbb41e67/ntgcalls-3.0.5-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:e8326ab47cd25b8d4bef38c0e77702f99d630b771ae835a46e8e13e198188c83", size = 38528899, upload-time = "2026-10-19T21:53:36.983Z" },
+    { url = "https://files.pythonhosted.org/packages/20/f8/cf56bfa73143bb56a626b2988b923db0b6bf059f41c72485b540bf76d396/ntgcalls-3.0.5-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:587b1a518f4da2294e418b4e3a2357f203fd33f79e567cc332e8c544b78ea2f9", size = 42618265, upload-time = "2026-10-19T21:53:41.189Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/ee/6ba5526a7dd5713bd4fe294073179305a89fd63e04adede2f15a99b7c9ff/ntgcalls-3.0.5-cp312-cp312-win_amd64.whl", hash = "sha256:593f489ad5a47b008463e21b65f369351dbb8947de8af82055cd1765fc51d89f", size = 11044788, upload-time = "2026-10-19T21:53:43.682Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/c0/a74b487181e417d594dacf4c6d3c381d37c7cc2abfe8906ae53cfd6beb66/ntgcalls-3.0.5-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:5e608683973b30fe4d83589b693a1b4596048d5b38dab5ab7d460a37c0ffd07a", size = 11048262, upload-time = "2026-10-19T21:53:45.874Z" },
+    { url = "https://files.pythonhosted.org/packages/08/25/5702893af54f3493a104296f963c9c2f9b6cd7c048cec8367e2467fa5366/ntgcalls-3.0.5-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:87f5b09505677039d2e5730c4a5fbf3e2f79fc90df963794eeaaeceea6333394", size = 38527306, upload-time = "2026-10-19T21:53:48.138Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/97/7ac6d79cbe50fe3c7af06608df5a5095f337fbaa7b123235bed461f75de6/ntgcalls-3.0.5-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:7dd1da7451bdac0a1d742e3d08ae1158613d11bbccdea6c782574060fddf088a", size = 42615811, upload-time = "2026-10-19T21:53:51.401Z" },
+    { url = "https://files.pythonhosted.org/packages/66/8c/de85010f94fdd8dd9afc9a0a518ce30c56b4f180aee0282bec64b9951871/ntgcalls-3.0.5-cp313-cp313-win_amd64.whl", hash = "sha256:2aa2c85de067f5f6c883eda616e3899b3af76cea88bc57d79f4ba3ba715e3f96", size = 11044751, upload-time = "2026-10-19T21:53:53.983Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.5.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1597,6 +1625,30 @@ wheels = [
 ]
 
 [[package]]
+name = "py-tgcalls"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "deprecation" },
+    { name = "ntgcalls" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/94/e2a63c588d9caf3198ba9637d0ccff5c19895a9f7d50087f4679492df662/py_tgcalls-3.0.0-py3-none-any.whl", hash = "sha256:c736066f3f79804f6f128231f4adad228e6aefb3418a473e0a52175c0a8baf49", size = 85503, upload-time = "2026-09-25T13:31:11.171Z" },
+]
+
+[package.optional-dependencies]
+telethon = [
+    { name = "telethon" },
+]
+
+[[package]]
+name = "pyaes"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/66/2c17bae31c906613795711fc78045c285048168919ace2220daa372c7d72/pyaes-1.6.1.tar.gz", hash = "sha256:02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f", size = 28536, upload-time = "2017-09-20T21:17:54.23Z" }
+
+[[package]]
 name = "pyasn1"
 version = "0.6.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1823,6 +1875,9 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
+telegram-call = [
+    { name = "py-tgcalls", extra = ["telethon"] },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1840,6 +1895,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "ruff", specifier = ">=0.17.2" },
 ]
+telegram-call = [{ name = "py-tgcalls", extras = ["telethon"], specifier = ">=3.0.0" }]
 
 [[package]]
 name = "rich"
@@ -1852,6 +1908,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654, upload-time = "2026-04-12T08:24:02.83Z" },
+]
+
+[[package]]
+name = "rsa"
+version = "4.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyasn1" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/8a/22b7beea3ee0d44b1916c0c1cb0ee3af23b700b6da9f04991899d0c555d4/rsa-4.9.1.tar.gz", hash = "sha256:e7bdbfdb5497da4c07dfd35530e1a902659db6ff241e39d9953cad06ebd0ae75", size = 29034, upload-time = "2025-04-16T09:51:18.218Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/8d/0133e4eb4beed9e425d9a98ed6e081a55d195481b7632472be1af08d2f6b/rsa-4.9.1-py3-none-any.whl", hash = "sha256:68635866661c6836b8d39430f97a996acbd61bfa49406748ea243539fe239762", size = 34696, upload-time = "2025-04-16T09:51:17.142Z" },
 ]
 
 [[package]]
@@ -1911,6 +1979,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c5/6f/6292145099f72a153a710245f46ae43e5fb6c77bec1b6086cb76c12dc280/sounddevice-0.5.6-py3-none-win32.whl", hash = "sha256:b36b807eb02abd257198bf84b2af05e4fea199a9d2f0019014169c7136d45e9c", size = 1009627, upload-time = "2026-08-17T07:55:00.401Z" },
     { url = "https://files.pythonhosted.org/packages/8d/3e/cbc593c31a5f0d817b3fe97e64aa8461bd0f55cb07b67ce1b776296ae336/sounddevice-0.5.6-py3-none-win_amd64.whl", hash = "sha256:7f4162f514f007b0bf25a3ccfed3f1705bc2ec311888a90232729eec4f57a4f4", size = 1009630, upload-time = "2026-08-17T07:55:02.088Z" },
     { url = "https://files.pythonhosted.org/packages/60/a4/b0c21c9f215a6fd9606b8f8748c21212dc098e5d5a2d93068c50edcf19b4/sounddevice-0.5.6-py3-none-win_arm64.whl", hash = "sha256:c8ae19173e5f27f8c12d4b5eee2dbfe542cee125d591e663e0fb4dfb75246d45", size = 1009630, upload-time = "2026-08-17T07:55:03.689Z" },
+]
+
+[[package]]
+name = "telethon"
+version = "1.45.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyaes" },
+    { name = "rsa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/07/b23b6cc73cd994763fbd641d196904f56cc966035eda841275b5689c6e5f/telethon-1.45.0.tar.gz", hash = "sha256:4cb7ae269b8ab9dad9fc490b859f0bc2f885121e990f5b20407b1faa0db2a1d9", size = 728057, upload-time = "2026-09-10T14:28:04.739Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/ac/241c09e6905215f225d8088438ceb1f32cc4b4865f3f49068cb402debfd7/telethon-1.45.0-py3-none-any.whl", hash = "sha256:339e24c83aedc9f12cbe389264627edc49779e4289c535aa90aafc4ce62f7972", size = 804098, upload-time = "2026-09-10T14:28:03.115Z" },
 ]
 
 [[package]]

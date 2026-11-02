@@ -49,3 +49,21 @@ async def test_call_log_carries_the_conversation_id_transcript_and_outcome(make_
     api.create_call_log = recording
     await save_call_log(state, log)
     assert saved == [log]
+
+
+def test_a_chat_log_has_no_dialled_number(make_state):
+    state = make_state(caller_phone="+919876543210")
+    tracker = LatencyTracker(llm_model="m")
+    tracker.add_message(ChatMessage(role="user", content=["is there parking"]))
+    tracker.add_message(ChatMessage(role="assistant", content=["Yes, valet from 6 PM."], metrics={}))
+    log = build_call_log(
+        state,
+        tracker,
+        channel="telegram",
+        dialed_number="+14155550123",
+        started_at=datetime(2026, 10, 24, 14, 0, tzinfo=UTC),
+        ended_at=datetime(2026, 10, 24, 14, 1, tzinfo=UTC),
+    )
+    assert log.channel == "telegram" and log.dialed_number is None
+    assert log.caller_number == "+919876543210"  # the number the guest shared
+    assert log.turns[1].latency.total_ms is None  # no voice in a chat

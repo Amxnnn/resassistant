@@ -25,7 +25,7 @@ def build_call_log(
     state: CallState,
     tracker: LatencyTracker,
     *,
-    channel: Literal["phone", "browser"],
+    channel: Literal["phone", "browser", "telegram"],
     dialed_number: str | None,
     started_at: datetime,
     ended_at: datetime,

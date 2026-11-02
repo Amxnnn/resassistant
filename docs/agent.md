@@ -27,6 +27,48 @@ lk cloud auth               # once: links the lk CLI to your LiveKit Cloud proje
 
 Switch the LLM without touching code: set `LLM_PROVIDER=groq` (default) or `gemini` in `.env`, and choose models with `GROQ_MODELS` (comma-separated, tried in order) and `GEMINI_MODEL`. `NOISE_CANCELLATION=off` turns off LiveKit's noise cancellation, for troubleshooting.
 
+## Text chats (Telegram)
+
+The same receptionist answers text chats. [agent/chat/](../agent/src/agent/chat/) runs it in a text-only session with the chat prompt ([receptionist_chat_en.md](../agent/src/agent/prompts/receptionist_chat_en.md)). The tools, booking rules, facts and Groq-to-Gemini fallback are the voice agent's own. Only the wording changes: booking codes and phone numbers are written out instead of spelled for the ear, and there are no "One moment." fillers, since the chat shows "typing…" instead.
+
+| Command | What it does |
+|---|---|
+| `uv run python -m agent.chat terminal` | Chat with the receptionist in your terminal; `/start` and `/menu` work too. Saves no call log. |
+| `uv run python -m agent.chat telegram` | Runs the Telegram bot. It long-polls Telegram, so it needs no public URL or tunnel. |
+
+To set up the bot:
+1. In Telegram, create it with @BotFather (`/newbot`), give it the commands `start`, `menu`, `mybookings` and `staff` (`/setcommands`), and turn off `/setjoingroups`.
+2. In `agent/.env`, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALLOWED_USER_IDS` (comma-separated; @userinfobot shows yours). Anyone else gets a polite refusal that shows their user ID, so they can be added.
+3. `DATA_SOURCE` works as it does for calls. `TELEGRAM_RESTAURANT_PHONE` picks the restaurant, by its number in the API; it defaults to `DEFAULT_RESTAURANT_PHONE`.
+
+How a chat works:
+- **One conversation per guest, like a call.** Messages sent within `CHAT_QUIET_SECONDS` (1.5 s) of each other get one reply, and a message that arrives mid-reply waits its turn. After `CHAT_IDLE_MINUTES` (30) of quiet, or a goodbye, the chat is logged (`POST /api/agent/calls` with channel `telegram`), and the next message starts a new one with the greeting.
+- **Phone numbers:** a booking needs one. The bot shows a "Share my phone number" button, and a number shared that way is the guest's own (the bot checks the contact is theirs), so it's trusted like caller ID and never read back. A typed number is read back before booking, like a spoken one. The bot remembers shared numbers only while it runs.
+- **Commands:** `/menu` sends the whole menu straight from the data, with allergens as entered and "not listed" where they're missing, and no LLM request. `/mybookings` and `/staff` reach the agent as "What bookings do I have?" and "I'd like to leave a message for the staff."
+- **Voice notes:** transcribed by Deepgram (Nova-3, the call's `STT_LANGUAGE` and the restaurant's keyterms, on the same credit). The bot shows `I heard: "..."` so a misheard word is easy to correct, then answers as if it were typed. Notes over 30 seconds are turned away; without `DEEPGRAM_API_KEY`, voice notes get a text-only reply.
+- **Limits:** 20 messages per 10 minutes and 500 characters per message, per chat. Photos, stickers and files get a "text and voice notes only" reply. Chats share the free LLM budget with calls (see [Free-tier limits](#free-tier-limits)).
+- **One copy at a time:** Telegram refuses a second process polling the same bot (HTTP 409), so run the bot in one place only.
+- **The web API must accept channel `telegram`** (contract 1.1.0). Until it does, it refuses chat logs; the bot logs a warning and carries on.
+- **"Can't reach our booking system":** with `DATA_SOURCE=api`, the web app must be running at `API_BASE_URL` (`cd web && pnpm dev` for `http://localhost:3000`). The bot checks at startup and logs what to fix.
+
+## Telegram calls (testing)
+
+Telegram bots can't take calls, so for testing a Telegram *user* account can answer them with the voice agent. [agent/telegram_call/](../agent/src/agent/telegram_call/) logs the account in, and when someone on `TELEGRAM_ALLOWED_USER_IDS` calls it:
+1. It creates a LiveKit room and joins it as the caller ([bridge.py](../agent/src/agent/telegram_call/bridge.py)). LiveKit sends the agent there, as for any call.
+2. The phone keeps ringing until the agent is in the room (up to 45 s, for a cold start), then the call is answered.
+3. Audio flows both ways as 48 kHz mono, 10 ms frames, with no resampling. The agent greets once the call is connected, so the caller never misses the start of the greeting.
+4. When either side hangs up, the other side is hung up too. The call is logged like any other, with channel `telegram`.
+
+Calls from anyone else are left alone, to ring on the account's own devices. A call the bridge didn't answer is never hung up by it, even if it was answered on the phone.
+
+Setup:
+1. Use a **spare Telegram account** if you can: this drives a user account through Telegram's API, which Telegram may restrict.
+2. At [my.telegram.org](https://my.telegram.org), under API development tools, create an app. Put its `api_id` and `api_hash` in `agent/.env` as `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`. `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` must be set too.
+3. Run `uv run --group telegram-call python -m agent.telegram_call`. The first run asks for the account's phone number and the code Telegram sends, then keeps the login in `.telegram_call.session`. That file is the account's whole login: it's in `.gitignore`, so never share it.
+4. Make sure an agent is running: `uv run python -m agent.main dev` locally (it has the newest code), or the agent deployed to LiveKit Cloud. When both are up, LiveKit picks one. A deployed agent older than this feature greets before the call connects, so the caller misses the start of the greeting.
+
+Limits: one call at a time, allowed callers only, and the restaurant background hum isn't sent. Replies are a little slower than on a phone line, because the audio crosses Telegram as well as LiveKit. For real guests, use the phone number or WhatsApp Business calling.
+
 ## Latency
 
 Every agent reply logs one line:
@@ -82,7 +124,37 @@ Tools in [tools.py](../agent/src/agent/tools.py):
 - **Phone numbers:** when the phone line gives a caller ID, it's used and anything the LLM passes is ignored. Spoken numbers default to India (+91).
 - **Messages and hanging up:** `take_message` leaves a message for the manager (large parties, events, or a caller who wants a person); `end_call` hangs up after the goodbye.
 - **Days:** the LLM passes the day as the caller said it ("Tuesday", "tomorrow", "27th"), and `resolve_day` looks it up in the calendar the API sent at call start. Left to itself, the LLM sometimes turned "this Tuesday" into Sunday's date.
-- **Phone numbers by voice:** a text transform in front of TTS spaces out any run of 7 or more digits, so numbers are read digit by digit however the LLM wrote them.
+- **Phone numbers by voice:** a text transform in front of TTS spaces out any run of 7 or more digits, so numbers are read digit by digit however the LLM wrote them. Numbers read in pairs ("ninety eight, seventy six...", common in India) are understood as well as digit by digit.
+- **Looking bookings up:** by the booking code, or by the line's own number (caller ID, or a number a chat guest shared from their own account). A number someone *says* never shows a booking. Anyone could say another guest's number, hear their bookings and codes, and cancel them. The exceptions are bookings made on the same call or chat.
+- **Limits checked in code:** a party of zero, a change past the phone party limit, an over-long name or note, and a message without a name or details get a question back instead of an API error.
+
+### Guardrails in code, not just the prompt
+
+The prompt asks the LLM not to invent anything, but a prompt is a request, not a guarantee. [guard.py](../agent/src/agent/guard.py) checks every sentence the LLM writes before the caller hears it (or the chat shows it). The first sentence that fails is replaced with a safe line, and the rest of that reply is dropped:
+
+| Check | Example it stops | Said instead |
+|---|---|---|
+| Claims a booking, change or cancellation that didn't happen on this call, or is still waiting for a yes | "Perfect, you're all set!" when the LLM skipped `confirm_action` | "Sorry, I haven't done that yet. Shall I go ahead?" |
+| A booking code no tool returned and the caller never said | "Your code is K, 7, Q, 9" | "Sorry, I don't have a booking code for that yet." |
+| A rupee price that's in neither the restaurant's data nor this conversation | "The lobster is 999 rupees" | "Sorry, I don't have that price." |
+
+The tools say the real confirmations and codes themselves, so a correct reply never trips these checks. The voice waits for a whole sentence before speaking anyway, so the check costs no time. A blocked sentence is logged as `reply guard: ...`.
+
+Prompt injection: the tools only do what the API allows, and the API checks who owns a booking. Restaurant data goes into the prompt as tidy single lines, so a menu entry can't forge a prompt section. And the prompt says nobody (not "the manager", not a "system update") can change the rules in a call or chat. Evals try each of these (below).
+
+### Hearing callers
+
+- **Longer pauses for details.** After the agent asks for a name, a day or time, or how many people, it waits 0.6 s of silence (up to 3 s while the turn detector thinks the caller is mid-thought) instead of 0.3 s. That stops "It's... Priyanka" being cut off after "It's". Phone numbers still get the longest wait (1 s, up to 4 s).
+- **When it can't make sense of what it heard, it asks again** rather than guessing. It speaks only English for now and says so.
+- **Recognition language** (`STT_LANGUAGE`). A comparison on 13 Indian-accented test clips (Gemini TTS, 2 Nov 2026; Nova-3 streaming with the restaurant's keyterms) scored the words that matter in each clip:
+
+  | Setting | Score | Notes |
+  |---|---|---|
+  | `en-US` (default) | 96% | Got Priyanka, Venkatesh, Jain, Swiggy; once dropped "table" |
+  | `en-IN` | 98% | Heard "Priyanka" as "pre" |
+  | `multi` | 78% | Understood Hindi mixed with English ("कल के लिए दो लोगों का table चाहिए"), but wrote "Venkatesh" in Telugu script and heard "Jain" as "Jan" |
+
+  `en-US` and `en-IN` are level within the noise of 13 clips, so the default stays `en-US`. Both English settings turned the Hinglish line into "Logo table", with 0.98 confidence. Confidence therefore can't flag garbled speech, which is why the prompt makes the agent ask again. `TTS_VOICE` picks the Aura-2 voice.
 
 ### One id per conversation
 
@@ -229,9 +301,12 @@ CI runs the same three on every PR that touches `agent/` or `contracts/`. They n
 - a closed day, a full slot, and a party too large
 - the full booking flow
 - hanging up
+- adversarial callers: a "manager" lifting the party limit, asking for the system prompt, a dish that isn't on the menu, a demanded discount, someone else's booking by phone number, garbled speech ("Logo table") and Hindi
+- text chats ([test_chat.py](../agent/evals/test_chat.py)): booking with a shared or a typed number, scope, allergens, plain-text answers, goodbye, a message posing as a system update, and someone else's booking by typed number
 
-Each test checks which tools were called, and Gemini judges the reply. Evals use API quota (about 25 requests for the set), so they don't run in CI. Run them from `agent/`:
+Each test checks which tools were called, and Gemini judges the reply. Evals use API quota (about 25 requests for the voice set and 15 for the chat set), so they don't run in CI. Run them from `agent/`:
 
 ```sh
 uv run pytest evals -v
+uv run pytest evals/test_chat.py -v    # only the chat scenarios
 ```

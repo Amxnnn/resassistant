@@ -14,6 +14,10 @@ A booking is built up in CallState.draft, one detail per turn. The LLM passes on
 prepare_booking asks for the next missing detail itself, and says what went wrong when a detail
 doesn't take (a phone number with digits missing), so the caller is never asked the same thing
 twice in the same words.
+
+The same agent and tools answer text chats (agent/chat/). With CallState.chat set, the lines are
+written for the eye: booking codes and phone numbers as written, typing instead of saying, and no
+"One moment." fillers, since the chat shows "typing…" instead.
 """
 
 from __future__ import annotations
@@ -43,6 +47,7 @@ from agent.api_client.models import (
     UpdateReservationRequest,
 )
 from agent.facts import Facts
+from agent.guard import ReplyGuard
 from agent.prompts import LOOKUP_TOOLS, build_instructions
 from agent.speakable import (
     join_or,
@@ -54,11 +59,17 @@ from agent.speakable import (
     speak_time,
     spell_code,
     spoken_digits,
+    write_phone,
 )
 
 Topic = Literal["hours", "location", "parking", "delivery", "specials", "policies"]
 Dietary = Literal["vegetarian", "vegan", "gluten_free", "dairy_free", "nut_free", "jain"]
 MessageTopic = Literal["large_party", "event", "catering", "callback", "other"]
+
+# The contract's length limits on what the caller says (CreateReservationRequest, CreateMessageRequest).
+NAME_MAX = 100
+NOTES_MAX = 500
+DETAILS_MAX = 2000
 
 # How long an availability answer the caller just heard can stand in for a fresh check when they
 # go on to book. Safe: creating the booking re-checks the table atomically on the server.
@@ -79,6 +90,15 @@ READ_BACK = ("Just to confirm:", "Let me read that back:")
 ANYTHING_ELSE = ("Anything else I can help with?", "Is there anything else I can do for you?")
 
 NOT_CONFIRMED_YET = "The caller hasn't confirmed yet. Read it back and wait for a clear yes."
+NEED_CODE = (
+    "Ask for their booking code: they were given it when they booked. For privacy, bookings can't be "
+    "looked up from a number someone says, only from the line's own number."
+)
+NEED_CODE_IN_CHAT = (
+    "Ask for their booking code (they were given it when they booked), or to share their own number "
+    "with the Share my phone number button. For privacy, a typed number can't be used to look bookings up."
+)
+NOT_A_PARTY = "Ask how many people it's for: at least one."
 NOT_DONE_YET = "The caller hasn't said goodbye, so don't hang up. Ask if there's anything else."
 NOTHING_TO_CHANGE = "That's how the booking already is. Ask what they'd like to change."
 ALREADY_DONE = (
@@ -104,6 +124,13 @@ ASK = {
     "phone": (
         "What's the best phone number for the booking?",
         "Sorry, I didn't catch a number. Could you say it digit by digit?",
+    ),
+}
+# The questions that read differently in a text chat, where the guest types.
+ASK_IN_CHAT = {
+    "phone": (
+        "What's the best phone number for the booking?",
+        "Sorry, I didn't get a number. Could you type it again?",
     ),
 }
 
@@ -185,8 +212,9 @@ class CallState:
     api: RestaurantAPI
     restaurant: RestaurantSettings
     call_id: str
-    caller_phone: str | None = None  # from the phone line: trusted
+    caller_phone: str | None = None  # from the phone line or the guest's own chat account: trusted
     given_phone: str | None = None  # said by the caller: read back before use
+    chat: bool = False  # a text chat: the guest reads each line instead of hearing it
     draft: BookingDraft = field(default_factory=BookingDraft)
     asked: tuple[str, str] | None = None  # the detail prepare_booking last asked for, and its line
     done_line: str | None = None  # what the caller heard when the last confirm_action went through
@@ -194,6 +222,10 @@ class CallState:
     end_call: Callable[[SpeechHandle], None] | None = None  # hangs up after that speech
     tool_speech: SpeechHandle | None = None  # the last line a tool said, while it may still be queued
     outcomes: list[str] = field(default_factory=list)  # what this call achieved, for the call log
+    made_codes: list[str] = field(default_factory=list)  # codes of bookings made on this call
+    # Every booking code this conversation has legitimately seen: made here, found with the caller's
+    # own number or code, or said by the caller. The reply guard (guard.py) blocks any other code.
+    known_codes: set[str] = field(default_factory=set)
     filler_spoken_in: str | None = None  # speech id of the reply that already said a filler
     told_free: tuple[date, str, int] | None = None  # the request the caller last heard is free
     booked_on: date | None = None  # the day of the booking made on this call, for the goodbye
@@ -204,6 +236,14 @@ class CallState:
     @property
     def phone(self) -> str | None:
         return self.caller_phone or self.given_phone
+
+    def show_code(self, code: str) -> str:
+        """A booking code as the guest takes it in: spelled out on a call, as written in a chat."""
+        return code if self.chat else spell_code(code)
+
+    def show_phone(self, e164: str) -> str:
+        """A phone number read back: digit by digit on a call, written out in a chat."""
+        return write_phone(e164) if self.chat else speak_phone(e164)
 
     @property
     def tz(self) -> ZoneInfo:
@@ -272,31 +312,44 @@ def resolve_day(s: CallState, said: str) -> date | str:
         return calendar[0]
     if "tomorrow" in words:
         return calendar[1]
-    for name in _WEEKDAYS:
-        if any(w in (name, name[:3]) for w in words):
-            matches = [d for d in calendar if f"{d:%A}".lower() == name]
-            # "next Saturday" said on a Saturday means a week from today, not today.
-            if "next" in words and matches and matches[0] == calendar[0]:
-                matches = matches[1:]
-            return matches[0] if matches else DAY_TOO_FAR
-    number = next(
-        (int(m.group(1)) for w in words if (m := re.fullmatch(r"(\d{1,2})(st|nd|rd|th)?", w))), None
-    )
+    weekday = next((name for name in _WEEKDAYS if any(w in (name, name[:3]) for w in words)), None)
     month = next((i for i, m in enumerate(_MONTHS, 1) for w in words if w.startswith(m)), None)
-    if number:
-        for d in calendar:
-            if d.day == number and (month is None or d.month == month):
-                return d
-        return DAY_TOO_FAR
+    number = next(
+        ((i, m) for i, w in enumerate(words) if (m := re.fullmatch(r"(\d{1,2})(st|nd|rd|th)?", w))), None
+    )
+    # A date wins over a weekday said with it: "Saturday the 31st" is the 31st, not this Saturday. A
+    # bare number beside a weekday is more likely a time ("Saturday at 8").
+    if number and (number[1].group(2) or month or not weekday or words[number[0] - 1 : number[0]] == ["the"]):
+        found = [
+            d for d in calendar if d.day == int(number[1].group(1)) and (month is None or d.month == month)
+        ]
+        if not found:
+            return DAY_TOO_FAR
+        if weekday and f"{found[0]:%A}".lower() != weekday:
+            day = speak_day(found[0], s.today())
+            return f"That date is {day}, not a {weekday.title()}. Ask which they mean."
+        return found[0]
+    if weekday:
+        matches = [d for d in calendar if f"{d:%A}".lower() == weekday]
+        # "next Saturday" said on a Saturday means a week from today, not today.
+        if "next" in words and matches and matches[0] == calendar[0]:
+            matches = matches[1:]
+        return matches[0] if matches else DAY_TOO_FAR
     return ASK_WHICH_DAY
 
 
 def real_name(guest_name: str | None) -> str | None:
     """The caller's name, or None for the stand-ins an LLM writes when it doesn't have one."""
-    name = " ".join((guest_name or "").split())
+    name = " ".join((guest_name or "").split())[:NAME_MAX]
     if _PLACEHOLDER.search(name):
         return None
     return None if re.sub(r"[\W_]+", " ", name.lower()).strip() in _NOT_A_NAME else name
+
+
+def _clip(text: str | None, limit: int) -> str | None:
+    """Free text the LLM passes on, tidied and cut to the API's limit (it rejects anything longer)."""
+    text = " ".join((text or "").split())
+    return text[:limit].rstrip() or None
 
 
 def _availability_reply(availability: Availability) -> str:
@@ -319,7 +372,10 @@ def _taken_line(s: CallState, day: date, at: time, availability: Availability) -
 
 def _goodbye(s: CallState) -> str:
     if s.booked_on:
-        return f"Thanks for calling, and we'll see you {on_day(s.booked_on, s.today())}! Goodbye."
+        thanks = "Thanks" if s.chat else "Thanks for calling"
+        return f"{thanks}, and we'll see you {on_day(s.booked_on, s.today())}! Goodbye."
+    if s.chat:
+        return f"Thanks for chatting with {s.restaurant.name}. Take care!"
     return f"Thanks for calling {s.restaurant.name}. Take care, goodbye!"
 
 
@@ -355,15 +411,19 @@ def _caller_is_done(context: RunContext[CallState]) -> bool:
     return caller_is_done(_last_words(context, "user"), _last_words(context, "assistant"))
 
 
-def _phone_retry_line(heard: str) -> str:
+def _phone_retry_line(heard: str, *, chat: bool = False) -> str:
     """What to say when a phone number didn't take: what was heard, so the caller knows what to fix."""
     if not heard:
-        return ASK["phone"][1]
+        return (ASK_IN_CHAT if chat else ASK)["phone"][1]
     n = len(heard)
+    digits = f"{n} digit{'s' if n != 1 else ''}"
+    if chat:
+        if n < 10:
+            return f"Sorry, that's only {digits}: {heard}. Could you type the whole number?"
+        return f"Sorry, that's {digits}, which is too many for a phone number. Could you type it again?"
     if n < 10:
-        digits = f"{n} digit{'s' if n != 1 else ''}: {speak_digits(heard)}"
-        return f"Sorry, I only caught {digits}. Could you say the whole number again?"
-    return f"Sorry, that's {n} digits, which is too many for a phone number. Could you say the number again?"
+        return f"Sorry, I only caught {digits}: {speak_digits(heard)}. Could you say the whole number again?"
+    return f"Sorry, that's {digits}, which is too many for a phone number. Could you say the number again?"
 
 
 def _wants_to_hang_up(chat_ctx: llm.ChatContext) -> bool:
@@ -376,7 +436,9 @@ def _wants_to_hang_up(chat_ctx: llm.ChatContext) -> bool:
 
 
 def _instructions(state: CallState, **kwargs) -> str:
-    return build_instructions(state.restaurant, caller_id_known=state.caller_phone is not None, **kwargs)
+    return build_instructions(
+        state.restaurant, caller_id_known=state.caller_phone is not None, chat=state.chat, **kwargs
+    )
 
 
 class Receptionist(Agent):
@@ -387,11 +449,18 @@ class Receptionist(Agent):
             instructions=_instructions(state) if state else "The call is still connecting. Say nothing."
         )
         self._ready = state is not None
+        self._state = state  # for the reply guard
+        self._facts: dict = {}  # the facts and remaining lookups in the prompt (use_facts)
 
     async def begin(self, state: CallState) -> None:
         """The restaurant's settings are in: take on its instructions and start answering."""
         await self.update_instructions(_instructions(state))
+        self._state = state
         self._ready = True
+
+    async def refresh_instructions(self, state: CallState) -> None:
+        """Rebuild the prompt after the state changed: a chat guest has just shared their number."""
+        await self.update_instructions(_instructions(state, **self._facts))
 
     async def use_facts(self, state: CallState, facts: Facts) -> None:
         """Put the menu and info in the prompt, and drop the lookup tools the facts make redundant.
@@ -405,7 +474,8 @@ class Receptionist(Agent):
         if facts.whole_menu:
             redundant.add("search_menu")
         lookups = [t for t in LOOKUP_TOOLS if t not in redundant]
-        await self.update_instructions(_instructions(state, facts=facts.text, lookups=lookups))
+        self._facts = {"facts": facts.text, "lookups": lookups}
+        await self.update_instructions(_instructions(state, **self._facts))
         await self.update_tools([t for t in self.tools if t.id not in redundant])
 
     async def on_user_turn_completed(self, turn_ctx: llm.ChatContext, new_message: llm.ChatMessage) -> None:
@@ -434,15 +504,28 @@ class Receptionist(Agent):
             return
         chat_ctx = chat_ctx.copy()
         chat_ctx.truncate(max_items=MAX_HISTORY_ITEMS)
+        if self._state is None:  # still connecting: nothing to check against
+            async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
+                yield chunk
+            return
+        # Each sentence is checked before the caller hears it (guard.py): no invented prices or
+        # codes, and no "you're booked" for a booking that didn't happen.
+        guard = ReplyGuard(self._state, chat_ctx)
         async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
-            yield chunk
+            for checked in guard.feed(chunk):
+                yield checked
+        for checked in guard.finish():
+            yield checked
 
     async def _waiting[T](self, context: RunContext[CallState], call: Awaitable[T]) -> T:
-        """Await an API call; if it's slow, say a short filler so the caller isn't left in silence."""
+        """Await an API call; if it's slow, say a short filler so the caller isn't left in silence.
+
+        A chat shows "typing…" while it waits instead.
+        """
         s = context.userdata
         say = getattr(getattr(context, "session", None), "say", None)
         speech_id = context.speech_handle.id
-        if say is None or s.filler_spoken_in == speech_id:
+        if say is None or s.chat or s.filler_spoken_in == speech_id:
             return await call
 
         async def filler() -> None:
@@ -484,7 +567,8 @@ class Receptionist(Agent):
     ) -> ToolResult:
         """Ask for one missing booking detail, in other words if the caller has just been asked."""
         s = context.userdata
-        first, again = (line.format(**fmt) for line in ASK[detail])
+        lines = ASK_IN_CHAT.get(detail, ASK[detail]) if s.chat else ASK[detail]
+        first, again = (line.format(**fmt) for line in lines)
         asked_just_now = (
             s.asked is not None
             and s.asked[0] == detail
@@ -609,6 +693,8 @@ class Receptionist(Agent):
         draft = s.draft
         if time is not None and _parse_time(time) is None:
             return "Use time as 24-hour HH:MM."
+        if party_size is not None and party_size < 1:
+            return NOT_A_PARTY
         found = resolve_day(s, day) if day else None
         if isinstance(found, str) and found != ASK_WHICH_DAY:
             return found
@@ -618,7 +704,7 @@ class Receptionist(Agent):
         draft.time = time or draft.time
         draft.party_size = party_size or draft.party_size
         draft.name = real_name(guest_name) or draft.name
-        draft.notes = notes or draft.notes
+        draft.notes = _clip(notes, NOTES_MAX) or draft.notes
         if not draft.party_size:
             return self._ask(context, "party_size", "Asked how many people.")
         if draft.party_size > s.restaurant.phone_party_limit:
@@ -662,7 +748,7 @@ class Receptionist(Agent):
             phone_number = said if len(spoken_digits(said)) >= 6 else None
         phone = self._accept_phone(s, phone_number)
         if phone is None and phone_number:  # a number came, but not a whole one: say what was heard
-            line = _phone_retry_line(spoken_digits(phone_number))
+            line = _phone_retry_line(spoken_digits(phone_number), chat=s.chat)
             s.asked = ("phone", line)
             return self._say(context, line, "The number wasn't complete. Asked for it again.")
         if phone is None:
@@ -684,7 +770,7 @@ class Receptionist(Agent):
         day_and_time = f"{speak_day(start.date(), s.today())} at {speak_time(start)}"
         details = f"a table for {party_size} under {name}, {day_and_time}"
         if not s.caller_phone:
-            details += f", and your number is {speak_phone(phone)}"
+            details += f", and your number is {s.show_phone(phone)}"
         if draft.notes:
             details += f", with the note: {draft.notes}"
         lead = random.choice(READ_BACK) if heard_free else "Good news, that time's free. Just to confirm:"
@@ -695,30 +781,31 @@ class Receptionist(Agent):
         )
 
     @function_tool()
-    async def find_my_bookings(
-        self,
-        context: RunContext[CallState],
-        booking_code: str | None = None,
-        phone_number: str | None = None,
-    ) -> str:
-        """Find the caller's upcoming bookings by code or phone number.
-
-        Args:
-            phone_number: Only if there's no caller ID.
-        """
+    async def find_my_bookings(self, context: RunContext[CallState], booking_code: str | None = None) -> str:
+        """Find the caller's upcoming bookings: by their booking code, or the number they're calling from."""
         s = context.userdata
-        phone = None if booking_code else self._accept_phone(s, phone_number)
-        if not booking_code and not phone:
-            return "Ask for the booking code or the phone number the booking was made with."
+        if booking_code:
+            lookups = [{"code": booking_code}]
+        elif s.caller_phone:
+            lookups = [{"phone": s.caller_phone}]
+        elif s.made_codes:  # this call's own bookings: the caller has just heard their codes
+            lookups = [{"code": code} for code in s.made_codes]
+        else:
+            # A number the caller says proves nothing: anyone could say someone else's and hear their
+            # bookings and codes. Only the line's own number, or the code, shows a booking.
+            return NEED_CODE_IN_CHAT if s.chat else NEED_CODE
         try:
-            result = await self._waiting(
-                context, s.api.find_reservations(s.restaurant.id, phone=phone, code=booking_code)
-            )
+            results = [
+                await self._waiting(context, s.api.find_reservations(s.restaurant.id, **lookup))
+                for lookup in lookups
+            ]
         except ApiError as e:
             return e.say
-        if not result.reservations:
-            return result.summary
-        found = "; ".join(f"{s.describe(r)}, code {spell_code(r.code)}" for r in result.reservations)
+        reservations = [r for result in results for r in result.reservations]
+        if not reservations:
+            return results[0].summary
+        s.known_codes.update(r.code for r in reservations)
+        found = "; ".join(f"{s.describe(r)}, code {s.show_code(r.code)}" for r in reservations)
         return f"Found: {found}."
 
     async def _find_one(self, context: RunContext[CallState], booking_code: str) -> Reservation | str:
@@ -729,6 +816,7 @@ class Receptionist(Agent):
             return e.say
         if not result.reservations:
             return "I couldn't find an upcoming booking with that code. Could you check it?"
+        s.known_codes.add(result.reservations[0].code)
         return result.reservations[0]
 
     @function_tool()
@@ -758,7 +846,11 @@ class Receptionist(Agent):
         if at is None:
             return "Use time as 24-hour HH:MM."
         start = datetime.combine(day, at, s.tz)
+        if new_party_size is not None and new_party_size < 1:
+            return NOT_A_PARTY
         party_size = new_party_size or res.party_size
+        if party_size > s.restaurant.phone_party_limit:
+            return TOO_MANY_FOR_THE_PHONE.format(limit=s.restaurant.phone_party_limit)
         if start == current and party_size == res.party_size:
             return NOTHING_TO_CHANGE
         request = UpdateReservationRequest(
@@ -824,14 +916,16 @@ class Receptionist(Agent):
             return e.say
         s.pending = None
         s.outcomes.append(OUTCOME_FOR[pending.kind])
+        s.known_codes.add(res.code)
         if pending.kind == "book":
+            s.made_codes.append(res.code)
             s.booked_on = res.start.astimezone(s.tz).date()
             s.draft = BookingDraft(name=s.draft.name)  # a second booking starts afresh, same caller
-            line = f"You're all set! Your booking code is {spell_code(res.code)}."
+            line = f"You're all set! Your booking code is {s.show_code(res.code)}."
         elif pending.kind == "change":
             line = (
                 f"Done, it's now a table for {res.party_size} {s.when(res.start)}. "
-                f"Your code is still {spell_code(res.code)}."
+                f"Your code is still {s.show_code(res.code)}."
             )
         else:
             s.booked_on = None
@@ -859,16 +953,21 @@ class Receptionist(Agent):
             phone_number: Only if there's no caller ID.
         """
         s = context.userdata
+        name = real_name(caller_name)
+        if name is None:
+            return "Ask the caller's name first."
+        if not details.strip():
+            return "Ask what the message is about first."
         phone = self._accept_phone(s, phone_number)
         if phone is None:
             return "Ask the caller for a callback number first."
         request = CreateMessageRequest(
             restaurant_id=s.restaurant.id,
             idempotency_key=uuid4(),
-            caller_name=caller_name,
+            caller_name=name,
             caller_phone=phone,
             topic=topic,
-            details=details,
+            details=_clip(details, DETAILS_MAX) or details,
             call_id=s.call_id,
         )
         try:

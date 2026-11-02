@@ -21,3 +21,7 @@ evals/results/
 
 # Sample-data bookings saved between test calls
 .sample_state.json
+
+# Telegram logins (agent/telegram_call): each one is a whole account's login
+*.session
+*.session-journal
